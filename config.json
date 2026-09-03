@@ -1,0 +1,8 @@
+{
+  "sync_url": "https://gist.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_GIST_ID/raw/bootcamp_qr_config.json",
+  "fetch_interval_seconds": 300,
+  "checkout_url": "https://example.com/checkout-qr-code-url-here",
+  "checkout_time": "18:00",
+  "display_seconds": 600,
+  "window_title": "퇴실 QR코드 - 스캔 후 아무 키나 눌러 닫기"
+}
