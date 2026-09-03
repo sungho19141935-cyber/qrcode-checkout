@@ -1,0 +1,6 @@
+{
+  "name": "qrcode-admin-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "퇴실 QR 관리자 웹페이지 (Vercel 서버리스 함수)"
+}

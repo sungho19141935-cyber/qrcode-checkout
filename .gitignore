@@ -7,3 +7,6 @@ dist/
 build/
 installer_output/
 *.spec
+admin-web/node_modules/
+admin-web/.vercel/
+.claude/settings.local.json

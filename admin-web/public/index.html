@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>퇴실 QR 관리자</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 480px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #1f2328;
+    background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6edf3; background: #0d1117; }
+    input { background: #161b22; color: #e6edf3; border-color: #30363d; }
+    .card { background: #161b22; border-color: #30363d; }
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.sub { color: #656d76; margin-top: 0; font-size: 0.9rem; }
+  .card {
+    border: 1px solid #d0d7de;
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  button {
+    margin-top: 18px;
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    background: #1f883d;
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.secondary { background: #57606a; margin-top: 8px; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .msg { margin-top: 14px; font-size: 0.88rem; white-space: pre-wrap; }
+  .msg.error { color: #cf222e; }
+  .msg.ok { color: #1a7f37; }
+  .hint { color: #656d76; font-size: 0.8rem; margin-top: 20px; }
+</style>
+</head>
+<body>
+  <h1>퇴실 QR 관리자</h1>
+  <p class="sub">비밀번호로 로그인 후 QR URL과 퇴실 시각을 갱신하세요.</p>
+
+  <div class="card">
+    <label for="password">관리자 비밀번호</label>
+    <input id="password" type="password" autocomplete="current-password" />
+
+    <label for="url">퇴실 QR URL</label>
+    <input id="url" type="text" placeholder="https://..." />
+
+    <label for="time">퇴실 시각 (HH:MM)</label>
+    <input id="time" type="text" placeholder="18:00" />
+
+    <button id="loadBtn" class="secondary" type="button">현재 값 불러오기</button>
+    <button id="saveBtn" type="button">저장</button>
+
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <p class="hint">저장하면 학생 프로그램은 몇 분 내로 자동으로 새 QR을 받아갑니다.</p>
+
+<script>
+  const msgEl = document.getElementById("msg");
+  const passwordEl = document.getElementById("password");
+  const urlEl = document.getElementById("url");
+  const timeEl = document.getElementById("time");
+  const loadBtn = document.getElementById("loadBtn");
+  const saveBtn = document.getElementById("saveBtn");
+
+  function showMsg(text, type) {
+    msgEl.textContent = text;
+    msgEl.className = "msg" + (type ? " " + type : "");
+  }
+
+  loadBtn.addEventListener("click", async () => {
+    loadBtn.disabled = true;
+    showMsg("불러오는 중...");
+    try {
+      const r = await fetch("/api/current");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "불러오기 실패");
+      urlEl.value = data.checkout_url || "";
+      timeEl.value = data.checkout_time || "";
+      showMsg("현재 값을 불러왔습니다.", "ok");
+    } catch (e) {
+      showMsg("오류: " + e.message, "error");
+    } finally {
+      loadBtn.disabled = false;
+    }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const password = passwordEl.value.trim();
+    const checkout_url = urlEl.value.trim();
+    const checkout_time = timeEl.value.trim();
+
+    if (!password || !checkout_url || !checkout_time) {
+      showMsg("모든 항목을 입력하세요.", "error");
+      return;
+    }
+
+    saveBtn.disabled = true;
+    showMsg("저장 중...");
+    try {
+      const r = await fetch("/api/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, checkout_url, checkout_time }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "저장 실패");
+      showMsg("저장 완료! 학생 PC에는 곧 자동으로 반영됩니다.", "ok");
+    } catch (e) {
+      showMsg("오류: " + e.message, "error");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

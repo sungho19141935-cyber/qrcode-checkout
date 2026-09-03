@@ -113,10 +113,14 @@ python3 main.py --test-now
 
 ## 3. 관리자: 매주 QR 갱신하기
 
-관리자 PC에서만 실행합니다. GUI와 CLI 둘 다 같은 `admin_config.json`을 공유하므로
-아무거나 편한 쪽을 쓰면 됩니다.
+**관리자가 나 혼자가 아니라 매기수 다른 매니저로 바뀔 수 있다면 [admin-web](admin-web/)을
+쓰세요.** GitHub 계정이나 토큰 없이 비밀번호만으로 웹페이지에서 QR을 갱신할 수 있고,
+매니저가 바뀌면 비밀번호만 바꾸면 됩니다. 배포 방법은 [admin-web/README.md](admin-web/README.md) 참고.
 
-### exe로 실행 (Python 설치 없이, 추천)
+아래 exe/GUI/CLI 방식은 **내 GitHub 계정의 개인 토큰**이 필요해서, 그 계정을 계속
+쓸 수 있는 한 사람(주로 본인)이 관리할 때만 적합합니다.
+
+### exe로 실행 (Python 설치 없이)
 학생용과 마찬가지로 관리자용도 고정 링크로 빌드되어 있습니다.
 
 - **관리자용 다운로드**: `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcodeAdmin.exe`
