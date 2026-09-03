@@ -23,8 +23,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build exe
+      - name: Build student QR display exe
         run: pyinstaller --onefile --noconsole --name QRcode main.py
+
+      - name: Build admin management exe
+        run: pyinstaller --onefile --noconsole --name QRcodeAdmin admin_gui.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -32,6 +35,7 @@ jobs:
           name: QRcode-windows
           path: |
             dist/QRcode.exe
+            dist/QRcodeAdmin.exe
             config.json
 
       - name: Publish/refresh "latest" release with fixed download links
@@ -42,7 +46,10 @@ jobs:
           gh release delete latest --yes || true
           git tag -f latest
           git push origin latest --force
-          gh release create latest dist/QRcode.exe config.json \
+          gh release create latest dist/QRcode.exe dist/QRcodeAdmin.exe config.json \
             --title "QRcode 최신 빌드" \
-            --notes "commit ${{ github.sha }} 에서 자동 빌드됨" \
+            --notes "commit ${{ github.sha }} 에서 자동 빌드됨
+
+          - QRcode.exe: 학생용 (퇴실 QR 자동 표시)
+          - QRcodeAdmin.exe: 관리자용 (QR URL·시각 등록)" \
             --latest

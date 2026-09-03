@@ -19,6 +19,15 @@ PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업
 - 학생 PC가 오프라인이거나 Gist 조회에 실패해도 마지막으로 받아온 `cache.json` 값으로 계속 동작합니다.
 - Gist는 **공개(public)** 로 만들어도 되며, 읽기는 누구나 가능하지만 **쓰기(갱신)** 는 GitHub 토큰이 있어야 하므로 관리자만 QR을 바꿀 수 있습니다.
 
+## 다운로드 링크 (배포용, 고정 주소)
+
+| 용도 | 링크 |
+|---|---|
+| 학생용 (QR 자동 표시) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcode.exe` + `config.json` |
+| 관리자용 (QR 등록/시각 설정) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcodeAdmin.exe` |
+
+두 exe 모두 코드를 수정해 push할 때마다 GitHub Actions가 자동으로 다시 빌드해서 같은 링크에 갱신합니다.
+
 ---
 
 ## 1. 최초 설정 (관리자 1회만)
@@ -96,7 +105,15 @@ python3 main.py --test-now
 관리자 PC에서만 실행합니다. GUI와 CLI 둘 다 같은 `admin_config.json`을 공유하므로
 아무거나 편한 쪽을 쓰면 됩니다.
 
-### GUI로 갱신 (추천)
+### exe로 실행 (Python 설치 없이, 추천)
+학생용과 마찬가지로 관리자용도 고정 링크로 빌드되어 있습니다.
+
+- **관리자용 다운로드**: `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcodeAdmin.exe`
+
+다운로드한 `QRcodeAdmin.exe`를 더블클릭하면 아래 GUI 설명과 동일하게 동작합니다.
+(`config.json`은 필요 없습니다 — Gist ID/토큰은 프로그램 안에서 직접 입력)
+
+### GUI로 갱신 (소스로 직접 실행)
 ```bash
 source venv/bin/activate
 python3 admin_gui.py
@@ -130,9 +147,10 @@ python3 admin_update.py --set-password
 (GUI는 재설정 시 `admin_config.json`에서 `password_hash`, `salt`를 지우고 다시 실행하면 최초 설정 화면이 뜹니다.)
 
 ### 보안 주의사항
-- `admin_config.json`에는 비밀번호 해시와 (저장했다면) GitHub 토큰이 들어있습니다.
-  **git에 커밋하거나 학생에게 공유하지 마세요** (`.gitignore`에 이미 제외되어 있습니다).
-- `admin_gui.py`, `admin_update.py` 자체도 학생에게 배포하지 마세요 (Gist 접근 로직이 들어있음).
+- `QRcodeAdmin.exe`/`admin_gui.py`/`admin_update.py` 자체는 코드에 비밀번호나 토큰이 들어있지 않아
+  공개 배포해도 안전합니다 (비밀번호·토큰은 실행 후 직접 입력).
+- 다만 실행하면 그 컴퓨터에 `admin_config.json`(비밀번호 해시, 저장했다면 GitHub 토큰)이 생성됩니다.
+  **이 파일은 절대 다른 사람과 공유하거나 git에 올리지 마세요** (`.gitignore`에 이미 제외되어 있습니다).
 - GitHub 토큰은 `gist` 권한만 부여하세요.
 
 ---
