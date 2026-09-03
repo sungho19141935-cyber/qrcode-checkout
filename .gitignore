@@ -5,4 +5,5 @@ cache.json
 admin_config.json
 dist/
 build/
+installer_output/
 *.spec

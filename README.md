@@ -23,10 +23,16 @@ PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업
 
 | 용도 | 링크 |
 |---|---|
-| 학생용 (QR 자동 표시) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcode.exe` + `config.json` |
+| 학생용 설치 프로그램 (추천) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcodeSetup.exe` |
+| 학생용 exe (설치 없이 바로 실행) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcode.exe` + `config.json` |
 | 관리자용 (QR 등록/시각 설정) | `https://github.com/sungho19141935-cyber/qrcode-checkout/releases/latest/download/QRcodeAdmin.exe` |
 
-두 exe 모두 코드를 수정해 push할 때마다 GitHub Actions가 자동으로 다시 빌드해서 같은 링크에 갱신합니다.
+**학생용 설치 프로그램(`QRcodeSetup.exe`)** 은 더블클릭하면 설치 마법사가 뜨고,
+"Windows 시작 시 자동 실행" 체크박스 하나로 부팅할 때마다 자동으로 대기 상태가 되도록
+설정해줍니다. `shell:startup` 폴더에 직접 바로가기를 넣는 수동 작업이 필요 없습니다.
+관리자 권한도 필요 없이 사용자 폴더에 설치됩니다.
+
+세 파일 모두 코드를 수정해 push할 때마다 GitHub Actions가 자동으로 다시 빌드해서 같은 링크에 갱신합니다.
 
 ---
 
@@ -81,6 +87,11 @@ Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 �
 
 ## 2. 학생 PC에서 실행
 
+### Windows — 설치 프로그램 사용 (추천)
+위 "다운로드 링크" 표의 `QRcodeSetup.exe`를 받아 더블클릭 → 설치 마법사에서
+"Windows 시작 시 자동 실행" 체크 → 설치 완료. 이후 부팅할 때마다 자동으로 대기 상태가 됩니다.
+
+### 소스로 직접 실행 (개발/테스트용)
 ```bash
 python3 main.py
 ```
@@ -92,9 +103,9 @@ python3 main.py
 python3 main.py --test-now
 ```
 
-### 부팅 시 자동 실행 (선택)
-- **Windows**: `pyinstaller --onefile --noconsole main.py` 로 exe 생성 → `config.json`을
-  같은 폴더에 두고 → `Win+R` → `shell:startup` → 폴더에 exe 바로가기 추가
+### 부팅 시 자동 실행을 수동으로 설정해야 할 때
+- **Windows (exe를 설치 프로그램 없이 직접 배포한 경우)**: exe와 `config.json`을 같은 폴더에 두고
+  → `Win+R` → `shell:startup` → 폴더에 exe 바로가기 추가
 - **macOS**: 로그인 항목(시스템 설정 > 일반 > 로그인 항목)에 `python3 main.py` 실행
   스크립트 등록, 또는 `launchd` 사용
 
@@ -155,7 +166,11 @@ python3 admin_update.py --set-password
 
 ---
 
-## 4. 배포용 exe 빌드 (선택)
+## 4. 배포용 exe / 설치 프로그램 빌드 (선택 — 보통은 필요 없음)
+
+GitHub Actions가 push할 때마다 `QRcode.exe`, `QRcodeAdmin.exe`, `QRcodeSetup.exe`를
+자동으로 빌드해 "다운로드 링크" 표의 고정 주소에 올려주므로, 평소에는 이 섹션을 볼 일이
+없습니다. 로컬에서 직접 빌드해봐야 할 때만 아래를 참고하세요.
 
 학생들에게 Python 설치 없이 나눠주고 싶다면 PyInstaller로 실행파일을 만듭니다.
 
