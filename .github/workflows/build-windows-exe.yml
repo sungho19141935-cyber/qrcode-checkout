@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -30,3 +33,16 @@ jobs:
           path: |
             dist/QRcode.exe
             config.json
+
+      - name: Publish/refresh "latest" release with fixed download links
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes || true
+          git tag -f latest
+          git push origin latest --force
+          gh release create latest dist/QRcode.exe config.json \
+            --title "QRcode 최신 빌드" \
+            --notes "commit ${{ github.sha }} 에서 자동 빌드됨" \
+            --latest
