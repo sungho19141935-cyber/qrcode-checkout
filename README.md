@@ -93,18 +93,29 @@ python3 main.py --test-now
 
 ## 3. 관리자: 매주 QR 갱신하기
 
-관리자 PC에서만 실행합니다.
+관리자 PC에서만 실행합니다. GUI와 CLI 둘 다 같은 `admin_config.json`을 공유하므로
+아무거나 편한 쪽을 쓰면 됩니다.
 
+### GUI로 갱신 (추천)
+```bash
+source venv/bin/activate
+python3 admin_gui.py
+```
+1. 최초 실행 시 비밀번호 설정 화면이 뜹니다 (6자 이상) → 설정 후 프로그램을 다시 실행해 로그인
+2. 비밀번호 입력 후 "잠금 해제"
+3. Gist ID / 파일 이름 / GitHub 토큰 입력 (필요하면 "이 컴퓨터에 토큰 저장" 체크 → 다음부터 비밀번호만 입력)
+4. "현재 값 불러오기"로 지금 등록된 QR URL·시각 확인
+5. URL/시각을 수정하고 "Gist에 반영" 클릭 → 즉시 반영, 학생 PC는 다음 동기화 주기(기본 5분)에 자동으로 받아감
+
+### CLI로 갱신
 ```bash
 source venv/bin/activate
 python3 admin_update.py
 ```
-
 - 최초 실행 시 관리자 비밀번호를 설정합니다 (6자 이상).
 - 이후 실행할 때마다 비밀번호를 확인한 뒤, Gist ID / 파일명 / GitHub 토큰을 물어봅니다
   (한 번 입력하면 `admin_config.json`에 로컬 저장되어 다음부터는 비밀번호만 입력하면 됩니다).
 - 새 퇴실 QR URL과 (필요하면) 시각을 입력하면 Gist가 즉시 갱신됩니다.
-- 학생 PC들은 각자의 `fetch_interval_seconds`(기본 5분) 주기로 자동 반영됩니다.
 
 명령줄 인자로 바로 갱신할 수도 있습니다:
 
@@ -116,10 +127,12 @@ python3 admin_update.py --url "https://새로운-퇴실-QR-주소" --time "18:00
 ```bash
 python3 admin_update.py --set-password
 ```
+(GUI는 재설정 시 `admin_config.json`에서 `password_hash`, `salt`를 지우고 다시 실행하면 최초 설정 화면이 뜹니다.)
 
 ### 보안 주의사항
 - `admin_config.json`에는 비밀번호 해시와 (저장했다면) GitHub 토큰이 들어있습니다.
   **git에 커밋하거나 학생에게 공유하지 마세요** (`.gitignore`에 이미 제외되어 있습니다).
+- `admin_gui.py`, `admin_update.py` 자체도 학생에게 배포하지 마세요 (Gist 접근 로직이 들어있음).
 - GitHub 토큰은 `gist` 권한만 부여하세요.
 
 ---
