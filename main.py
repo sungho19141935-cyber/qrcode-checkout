@@ -41,7 +41,11 @@ def save_cache(data: dict):
 def fetch_remote_config(sync_url: str, timeout: int = 10) -> Optional[dict]:
     """관리자가 갱신하는 중앙 설정(Gist 등)을 가져온다. 실패하면 None."""
     try:
-        req = urllib.request.Request(sync_url, headers={"Cache-Control": "no-cache"})
+        # raw.githubusercontent.com은 CDN에서 몇 분간 응답을 캐시하므로,
+        # 캐시 버스팅 쿼리를 붙여 항상 최신 내용을 받아온다.
+        sep = "&" if "?" in sync_url else "?"
+        busted_url = f"{sync_url}{sep}t={int(time.time())}"
+        req = urllib.request.Request(busted_url, headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         if "checkout_url" not in data:

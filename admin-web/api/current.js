@@ -12,7 +12,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const r = await fetch(rawUrl, { cache: "no-store" });
+    // raw.githubusercontent.com은 CDN에서 몇 분간 응답을 캐시하므로,
+    // 캐시 버스팅 쿼리를 붙여 항상 최신 내용을 받아온다.
+    const bustedUrl = rawUrl + (rawUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
+    const r = await fetch(bustedUrl, { cache: "no-store" });
     if (!r.ok) throw new Error(`gist fetch ${r.status}`);
     const data = await r.json();
     res.status(200).json(data);
