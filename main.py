@@ -160,7 +160,8 @@ def run_scheduler(config):
         now_hm = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
 
-        if now_hm == state["checkout_time"] and last_triggered_date != today:
+        is_weekend = now.weekday() >= 5  # 5=토요일, 6=일요일
+        if now_hm == state["checkout_time"] and last_triggered_date != today and not is_weekend:
             last_triggered_date = today
             print(f"[QRcode] {now_hm} 도달 - QR 화면 표시")
             show_qr_window(state, window_title, display_seconds)
