@@ -11,7 +11,7 @@ PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업
 ```
 [관리자 PC] admin_update.py (비밀번호 인증) --> GitHub Gist(JSON) 갱신
                                                      |
-                                                     v (5분마다 자동 조회)
+                                                     v (1분마다 자동 조회)
 [학생 PC 1..N] main.py --> Gist에서 checkout_url / checkout_time을 읽어와 캐시(cache.json)
                             --> 정해진 시각에 QR 전체화면 표시
 ```
@@ -71,7 +71,7 @@ Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 �
 ```json
 {
   "sync_url": "https://gist.githubusercontent.com/내아이디/GIST_ID/raw/bootcamp_qr_config.json",
-  "fetch_interval_seconds": 300,
+  "fetch_interval_seconds": 60,
   "checkout_url": "https://실제-퇴실-QR-주소",
   "checkout_time": "18:00",
   "display_seconds": 600,
@@ -171,7 +171,7 @@ python3 admin_gui.py
 2. 비밀번호 입력 후 "잠금 해제"
 3. Gist ID / 파일 이름 / GitHub 토큰 입력 (필요하면 "이 컴퓨터에 토큰 저장" 체크 → 다음부터 비밀번호만 입력)
 4. "현재 값 불러오기"로 지금 등록된 QR URL·시각 확인
-5. URL/시각을 수정하고 "Gist에 반영" 클릭 → 즉시 반영, 학생 PC는 다음 동기화 주기(기본 5분)에 자동으로 받아감
+5. URL/시각을 수정하고 "Gist에 반영" 클릭 → 즉시 반영, 학생 PC는 다음 동기화 주기(기본 1분)에 자동으로 받아감
 
 ### CLI로 갱신
 ```bash

@@ -1,6 +1,6 @@
 {
   "sync_url": "https://gist.githubusercontent.com/sungho19141935-cyber/5cd259614734afe93651c086fdcad554/raw/bootcamp_qr_config.json",
-  "fetch_interval_seconds": 300,
+  "fetch_interval_seconds": 60,
   "checkout_url": "https://example.com/checkout-qr-code-url-here",
   "checkout_time": "18:00",
   "display_seconds": 600,
