@@ -3,17 +3,21 @@
 부트캠프 퇴실 체크를 깜빡하는 사람이 없도록, 정해진 시간이 되면 퇴실용 QR코드를
 컴퓨터 화면에 전체화면으로 띄워주는 프로그램입니다.
 
-QR은 매주 바뀌므로, **관리자(본인)가 GitHub Gist 한 곳만 갱신하면 설치된 모든 학생
-PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업이 필요 없습니다.
+QR은 매주 바뀌므로, **관리자(본인)가 admin-web에서 QR 이미지 한 장만 올리면 설치된
+모든 학생 PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업이 필요 없습니다.
+
+출석 시스템 QR을 URL이 아니라 **화면 캡처(이미지)로만 얻을 수 있는 경우**를 위해,
+관리자는 QR을 URL로 직접 입력하는 대신 **캡처한 QR 이미지 파일을 그대로 업로드**합니다.
+학생 프로그램은 그 이미지를 새로 만들지 않고 받은 그대로 화면에 띄웁니다.
 
 ## 동작 구조
 
 ```
-[관리자 PC] admin_update.py (비밀번호 인증) --> GitHub Gist(JSON) 갱신
+[관리자] admin-web (비밀번호 로그인, QR 이미지 업로드) --> GitHub Gist(JSON, base64 이미지 포함) 갱신
                                                      |
                                                      v (1분마다 자동 조회)
-[학생 PC 1..N] main.py --> Gist에서 checkout_url / checkout_time을 읽어와 캐시(cache.json)
-                            --> 정해진 시각에 QR 전체화면 표시
+[학생 PC 1..N] main.py --> Gist에서 qr_image(base64) / checkout_time을 읽어와 캐시(cache.json)
+                            --> 정해진 시각에 그 QR 이미지를 그대로 전체화면 표시
 ```
 
 - 학생 PC가 오프라인이거나 Gist 조회에 실패해도 마지막으로 받아온 `cache.json` 값으로 계속 동작합니다.
@@ -44,10 +48,12 @@ PC가 자동으로 새 QR을 받아갑니다.** 학생 PC에서는 별도 작업
 3. 내용:
    ```json
    {
-     "checkout_url": "https://실제-퇴실-QR-주소",
+     "qr_image": "data:image/png;base64,...",
      "checkout_time": "18:00"
    }
    ```
+   (admin-web을 쓰면 이 파일은 웹페이지가 알아서 채워주므로 직접 만들 필요는 없습니다.
+   admin-web 없이 Gist를 직접 만드는 경우에만 참고하세요.)
 4. **Create public gist** 클릭
 5. 생성된 Gist의 URL에서 Gist ID를 확인 (예: `https://gist.github.com/내아이디/abcdef1234567890` → ID는 `abcdef1234567890`)
 6. "Raw" 버튼을 눌러 나오는 주소를 복사 (`https://gist.githubusercontent.com/.../raw/bootcamp_qr_config.json` 형태)
@@ -66,13 +72,13 @@ pip install -r requirements.txt
 
 ### 1-4. 학생 배포용 `config.json` 작성
 `sync_url`에 위에서 복사한 Raw 주소를 넣습니다. `checkout_url`/`checkout_time`은
-Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 됩니다.
+Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 됩니다 (`checkout_url`은
+QR 이미지가 아직 한 번도 동기화되지 않았을 때만 쓰이는 URL 기반 예비 QR로, 없어도 됩니다).
 
 ```json
 {
   "sync_url": "https://gist.githubusercontent.com/내아이디/GIST_ID/raw/bootcamp_qr_config.json",
   "fetch_interval_seconds": 60,
-  "checkout_url": "https://실제-퇴실-QR-주소",
   "checkout_time": "18:00",
   "display_seconds": 600,
   "window_title": "퇴실 QR코드 - 스캔 후 아무 키나 눌러 닫기"
@@ -153,6 +159,10 @@ python3 main.py --test-now
 
 아래 exe/GUI/CLI 방식은 **내 GitHub 계정의 개인 토큰**이 필요해서, 그 계정을 계속
 쓸 수 있는 한 사람(주로 본인)이 관리할 때만 적합합니다.
+
+> **참고**: 아래 exe/GUI/CLI 도구는 아직 "QR URL 텍스트 입력" 방식만 지원합니다.
+> 출석 시스템의 QR을 **URL 없이 이미지로만** 받는다면 admin-web의 이미지 업로드
+> 기능을 사용하세요 (위 "매니저 교체 시" 안내 참고).
 
 ### exe로 실행 (Python 설치 없이)
 학생용과 마찬가지로 관리자용도 고정 링크로 빌드되어 있습니다.

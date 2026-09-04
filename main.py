@@ -1,4 +1,7 @@
 import argparse
+import base64
+import binascii
+import io
 import json
 import sys
 import time
@@ -10,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import qrcode
-from PIL import ImageTk
+from PIL import Image, ImageTk
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 CACHE_PATH = Path(__file__).parent / "cache.json"
@@ -48,8 +51,8 @@ def fetch_remote_config(sync_url: str, timeout: int = 10) -> Optional[dict]:
         req = urllib.request.Request(busted_url, headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        if "checkout_url" not in data:
-            print("[QRcode] 원격 설정에 checkout_url이 없습니다. 무시합니다.")
+        if "checkout_time" not in data or not ("qr_image" in data or "checkout_url" in data):
+            print("[QRcode] 원격 설정에 checkout_time과 qr_image(또는 checkout_url)가 필요합니다. 무시합니다.")
             return None
         return data
     except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
@@ -64,8 +67,27 @@ def make_qr_image(url: str, box_size: int = 10):
     return qr.make_image(fill_color="black", back_color="white").convert("RGB")
 
 
-def show_qr_window(url: str, title: str, display_seconds: int):
-    img = make_qr_image(url)
+def decode_qr_image(qr_image_b64: str):
+    """관리자가 업로드한 QR 이미지(base64)를 디코딩한다. 'data:image/png;base64,' 접두사도 허용."""
+    b64 = qr_image_b64.split(",", 1)[-1] if "," in qr_image_b64 else qr_image_b64
+    raw = base64.b64decode(b64)
+    return Image.open(io.BytesIO(raw)).convert("RGB")
+
+
+def get_display_image(state: dict):
+    """관리자가 업로드한 QR 이미지가 있으면 그대로, 없으면 checkout_url로 QR을 생성해서 반환."""
+    qr_image_b64 = state.get("qr_image")
+    if qr_image_b64:
+        try:
+            return decode_qr_image(qr_image_b64)
+        except (ValueError, binascii.Error, OSError) as e:
+            print(f"[QRcode] 저장된 QR 이미지를 열지 못했습니다: {e}")
+    return make_qr_image(state.get("checkout_url", ""))
+
+
+def show_qr_window(state: dict, title: str, display_seconds: int):
+    img = get_display_image(state)
+    img.thumbnail((700, 700))
 
     root = tk.Tk()
     root.title(title)
@@ -108,6 +130,7 @@ def run_scheduler(config):
 
     state = load_cache()
     state.setdefault("checkout_url", config.get("checkout_url", ""))
+    state.setdefault("qr_image", config.get("qr_image"))
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
 
     last_triggered_date = None
@@ -124,14 +147,12 @@ def run_scheduler(config):
             last_fetch = now_ts
             remote = fetch_remote_config(sync_url)
             if remote:
-                if remote.get("checkout_url") != state.get("checkout_url") or remote.get(
-                    "checkout_time"
-                ) != state.get("checkout_time"):
-                    print(
-                        f"[QRcode] 설정 갱신됨 -> URL: {remote.get('checkout_url')}, "
-                        f"시각: {remote.get('checkout_time')}"
-                    )
-                state["checkout_url"] = remote.get("checkout_url", state["checkout_url"])
+                if remote.get("checkout_time") != state.get("checkout_time") or remote.get(
+                    "qr_image"
+                ) != state.get("qr_image") or remote.get("checkout_url") != state.get("checkout_url"):
+                    print(f"[QRcode] 설정 갱신됨 -> 시각: {remote.get('checkout_time')}")
+                state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
+                state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
                 save_cache(state)
 
@@ -141,8 +162,8 @@ def run_scheduler(config):
 
         if now_hm == state["checkout_time"] and last_triggered_date != today:
             last_triggered_date = today
-            print(f"[QRcode] {now_hm} 도달 - QR 화면 표시 ({state['checkout_url']})")
-            show_qr_window(state["checkout_url"], window_title, display_seconds)
+            print(f"[QRcode] {now_hm} 도달 - QR 화면 표시")
+            show_qr_window(state, window_title, display_seconds)
 
         time.sleep(15)
 
@@ -156,13 +177,15 @@ def main():
 
     if args.test_now:
         state = load_cache()
-        url = state.get("checkout_url") or config.get("checkout_url", "")
+        state.setdefault("checkout_url", config.get("checkout_url", ""))
+        state.setdefault("qr_image", config.get("qr_image"))
         if config.get("sync_url"):
             remote = fetch_remote_config(config["sync_url"])
             if remote:
-                url = remote.get("checkout_url", url)
+                state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
+                state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
         show_qr_window(
-            url,
+            state,
             config.get("window_title", "퇴실 QR코드"),
             int(config.get("display_seconds", 600)),
         )

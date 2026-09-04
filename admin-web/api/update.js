@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { password, checkout_url, checkout_time } = req.body || {};
+  const { password, checkout_time, qr_image } = req.body || {};
 
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
@@ -26,12 +26,21 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  if (!checkout_url || !checkout_time) {
-    res.status(400).json({ error: "checkout_url과 checkout_time을 모두 입력하세요." });
+  if (!checkout_time || !qr_image) {
+    res.status(400).json({ error: "QR 이미지와 checkout_time을 모두 입력하세요." });
     return;
   }
   if (!/^\d{2}:\d{2}$/.test(checkout_time)) {
     res.status(400).json({ error: "checkout_time은 HH:MM 형식이어야 합니다." });
+    return;
+  }
+  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/.test(qr_image)) {
+    res.status(400).json({ error: "qr_image는 data:image/...;base64, 형식의 이미지여야 합니다." });
+    return;
+  }
+  // Vercel Serverless Function 요청 본문 한도(4.5MB)를 넘지 않도록 여유를 두고 제한
+  if (qr_image.length > 3_500_000) {
+    res.status(400).json({ error: "이미지가 너무 큽니다. 더 작은 이미지(스크린샷 크롭 등)를 사용하세요." });
     return;
   }
 
@@ -43,7 +52,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const content = JSON.stringify({ checkout_url, checkout_time }, null, 2);
+  const content = JSON.stringify({ qr_image, checkout_time }, null, 2);
 
   try {
     const r = await fetch(`https://api.github.com/gists/${gistId}`, {

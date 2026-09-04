@@ -64,8 +64,9 @@
     <label for="password">관리자 비밀번호</label>
     <input id="password" type="password" autocomplete="current-password" />
 
-    <label for="url">퇴실 QR URL</label>
-    <input id="url" type="text" placeholder="https://..." />
+    <label for="qrFile">퇴실 QR 이미지 (스크린샷/이미지 파일)</label>
+    <input id="qrFile" type="file" accept="image/*" />
+    <img id="preview" alt="QR 미리보기" style="display:none; max-width:100%; margin-top:10px; border:1px solid #d0d7de; border-radius:6px;" />
 
     <label for="time">퇴실 시각 (HH:MM)</label>
     <input id="time" type="text" placeholder="18:00" />
@@ -81,15 +82,35 @@
 <script>
   const msgEl = document.getElementById("msg");
   const passwordEl = document.getElementById("password");
-  const urlEl = document.getElementById("url");
+  const fileEl = document.getElementById("qrFile");
+  const previewEl = document.getElementById("preview");
   const timeEl = document.getElementById("time");
   const loadBtn = document.getElementById("loadBtn");
   const saveBtn = document.getElementById("saveBtn");
+
+  let qrImageDataUrl = null; // 새로 고른 파일이 있으면 이 값을 저장에 사용
 
   function showMsg(text, type) {
     msgEl.textContent = text;
     msgEl.className = "msg" + (type ? " " + type : "");
   }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  fileEl.addEventListener("change", async () => {
+    const file = fileEl.files[0];
+    if (!file) return;
+    qrImageDataUrl = await readFileAsDataUrl(file);
+    previewEl.src = qrImageDataUrl;
+    previewEl.style.display = "block";
+  });
 
   loadBtn.addEventListener("click", async () => {
     loadBtn.disabled = true;
@@ -98,8 +119,12 @@
       const r = await fetch("/api/current");
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "불러오기 실패");
-      urlEl.value = data.checkout_url || "";
       timeEl.value = data.checkout_time || "";
+      if (data.qr_image) {
+        previewEl.src = data.qr_image;
+        previewEl.style.display = "block";
+        qrImageDataUrl = data.qr_image; // 새 파일을 안 고르면 이 기존 이미지 그대로 저장됨
+      }
       showMsg("현재 값을 불러왔습니다.", "ok");
     } catch (e) {
       showMsg("오류: " + e.message, "error");
@@ -110,11 +135,14 @@
 
   saveBtn.addEventListener("click", async () => {
     const password = passwordEl.value.trim();
-    const checkout_url = urlEl.value.trim();
     const checkout_time = timeEl.value.trim();
 
-    if (!password || !checkout_url || !checkout_time) {
-      showMsg("모든 항목을 입력하세요.", "error");
+    if (!password || !checkout_time) {
+      showMsg("비밀번호와 시각을 입력하세요.", "error");
+      return;
+    }
+    if (!qrImageDataUrl) {
+      showMsg("QR 이미지를 선택하거나, 먼저 '현재 값 불러오기'로 기존 이미지를 불러오세요.", "error");
       return;
     }
 
@@ -124,7 +152,7 @@
       const r = await fetch("/api/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, checkout_url, checkout_time }),
+        body: JSON.stringify({ password, checkout_time, qr_image: qrImageDataUrl }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "저장 실패");
