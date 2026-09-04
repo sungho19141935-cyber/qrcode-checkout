@@ -87,9 +87,43 @@ Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 �
 
 ## 2. 학생 PC에서 실행
 
-### Windows — 설치 프로그램 사용 (추천)
+개인 노트북에 배포하는 경우 Windows의 **스마트 앱 제어(Smart App Control)/SmartScreen**이
+서명되지 않은 `.exe`를 차단할 수 있습니다. 통제할 수 없는 개인 PC에 배포한다면
+**소스 배포(권장)** 방식을 사용하세요.
+
+### Windows — 원클릭 설치 (가장 추천, 파일 전달 불필요)
+학생이 파일을 다운로드/압축 해제할 필요 없이, **PowerShell에 한 줄만 붙여넣으면**
+자동으로 설치됩니다.
+
+1. `Win + X` → **터미널**(또는 Windows PowerShell) 실행
+2. 아래 명령어 붙여넣고 Enter
+
+```powershell
+irm https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/install.ps1 | iex
+```
+
+이 한 줄이 자동으로:
+- `%LOCALAPPDATA%\qrcode-checkout`에 최신 `main.py`/`config.json`/`requirements.txt` 다운로드
+- Python 설치 여부 확인 (없으면 설치 링크 안내 후 종료)
+- 가상환경 생성 + 패키지 설치
+- Windows 시작프로그램 자동 등록
+- 설치 직후 바로 백그라운드 대기 시작
+
+Python이 없는 학생은 https://www.python.org/downloads/ 에서 설치하면서
+**"Add python.exe to PATH"를 반드시 체크**한 뒤 명령어를 다시 실행하면 됩니다.
+
+### Windows — zip 파일 배포 (대안)
+PowerShell 명령어 실행이 부담스러운 경우, 다음 파일들을 압축해서 전달할 수도 있습니다.
+- `main.py`, `requirements.txt`, `config.json`
+- `student_setup.bat`, `run_silent.vbs`
+
+학생은 압축을 풀고 **`student_setup.bat`을 더블클릭**하면 됩니다 (동작은 `install.ps1`과 동일).
+
+### Windows — 설치 프로그램(exe) 사용
 위 "다운로드 링크" 표의 `QRcodeSetup.exe`를 받아 더블클릭 → 설치 마법사에서
 "Windows 시작 시 자동 실행" 체크 → 설치 완료. 이후 부팅할 때마다 자동으로 대기 상태가 됩니다.
+단, 서명되지 않은 exe라 스마트 앱 제어/SmartScreen에 막힐 수 있습니다
+(막히면 위 소스 배포 방식을 사용하세요).
 
 ### 소스로 직접 실행 (개발/테스트용)
 ```bash
