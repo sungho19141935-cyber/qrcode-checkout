@@ -19,6 +19,8 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 CACHE_PATH = Path(__file__).parent / "cache.json"
 
 DEFAULT_CHECKOUT_TIME = "18:00"
+DEFAULT_ACTIVE_DAYS = ["mon", "tue", "wed", "thu", "fri"]
+WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]  # datetime.weekday() 순서
 
 
 def load_config():
@@ -132,6 +134,7 @@ def run_scheduler(config):
     state.setdefault("checkout_url", config.get("checkout_url", ""))
     state.setdefault("qr_image", config.get("qr_image"))
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
+    state.setdefault("active_days", config.get("active_days", DEFAULT_ACTIVE_DAYS))
 
     last_triggered_date = None
     last_fetch = 0.0
@@ -149,19 +152,26 @@ def run_scheduler(config):
             if remote:
                 if remote.get("checkout_time") != state.get("checkout_time") or remote.get(
                     "qr_image"
-                ) != state.get("qr_image") or remote.get("checkout_url") != state.get("checkout_url"):
-                    print(f"[QRcode] 설정 갱신됨 -> 시각: {remote.get('checkout_time')}")
+                ) != state.get("qr_image") or remote.get("checkout_url") != state.get(
+                    "checkout_url"
+                ) or remote.get("active_days") != state.get("active_days"):
+                    print(
+                        f"[QRcode] 설정 갱신됨 -> 시각: {remote.get('checkout_time')}, "
+                        f"요일: {remote.get('active_days', state['active_days'])}"
+                    )
                 state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
+                state["active_days"] = remote.get("active_days", state["active_days"])
                 save_cache(state)
 
         now = datetime.now()
         now_hm = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
 
-        is_weekend = now.weekday() >= 5  # 5=토요일, 6=일요일
-        if now_hm == state["checkout_time"] and last_triggered_date != today and not is_weekend:
+        today_key = WEEKDAY_KEYS[now.weekday()]
+        is_active_day = today_key in state.get("active_days", DEFAULT_ACTIVE_DAYS)
+        if now_hm == state["checkout_time"] and last_triggered_date != today and is_active_day:
             last_triggered_date = today
             print(f"[QRcode] {now_hm} 도달 - QR 화면 표시")
             show_qr_window(state, window_title, display_seconds)

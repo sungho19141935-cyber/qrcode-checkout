@@ -54,6 +54,25 @@
   .msg.error { color: #cf222e; }
   .msg.ok { color: #1a7f37; }
   .hint { color: #656d76; font-size: 0.8rem; margin-top: 20px; }
+  .days { display: flex; gap: 6px; }
+  .days label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-weight: 400;
+    font-size: 0.8rem;
+    margin: 0;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 8px 0;
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    .days label { border-color: #30363d; }
+  }
+  .days input { width: auto; margin: 0; }
 </style>
 </head>
 <body>
@@ -71,6 +90,17 @@
     <label for="time">퇴실 시각 (HH:MM)</label>
     <input id="time" type="text" placeholder="18:00" />
 
+    <label>실행 요일</label>
+    <div class="days">
+      <label><input type="checkbox" value="mon" checked />월</label>
+      <label><input type="checkbox" value="tue" checked />화</label>
+      <label><input type="checkbox" value="wed" checked />수</label>
+      <label><input type="checkbox" value="thu" checked />목</label>
+      <label><input type="checkbox" value="fri" checked />금</label>
+      <label><input type="checkbox" value="sat" />토</label>
+      <label><input type="checkbox" value="sun" />일</label>
+    </div>
+
     <button id="loadBtn" class="secondary" type="button">현재 값 불러오기</button>
     <button id="saveBtn" type="button">저장</button>
 
@@ -85,10 +115,22 @@
   const fileEl = document.getElementById("qrFile");
   const previewEl = document.getElementById("preview");
   const timeEl = document.getElementById("time");
+  const dayEls = Array.from(document.querySelectorAll(".days input"));
   const loadBtn = document.getElementById("loadBtn");
   const saveBtn = document.getElementById("saveBtn");
 
+  const DEFAULT_DAYS = ["mon", "tue", "wed", "thu", "fri"];
+
   let qrImageDataUrl = null; // 새로 고른 파일이 있으면 이 값을 저장에 사용
+
+  function setActiveDays(days) {
+    const set = new Set(days && days.length ? days : DEFAULT_DAYS);
+    dayEls.forEach((el) => { el.checked = set.has(el.value); });
+  }
+
+  function getActiveDays() {
+    return dayEls.filter((el) => el.checked).map((el) => el.value);
+  }
 
   function showMsg(text, type) {
     msgEl.textContent = text;
@@ -120,6 +162,7 @@
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "불러오기 실패");
       timeEl.value = data.checkout_time || "";
+      setActiveDays(data.active_days);
       if (data.qr_image) {
         previewEl.src = data.qr_image;
         previewEl.style.display = "block";
@@ -136,6 +179,7 @@
   saveBtn.addEventListener("click", async () => {
     const password = passwordEl.value.trim();
     const checkout_time = timeEl.value.trim();
+    const active_days = getActiveDays();
 
     if (!password || !checkout_time) {
       showMsg("비밀번호와 시각을 입력하세요.", "error");
@@ -145,6 +189,10 @@
       showMsg("QR 이미지를 선택하거나, 먼저 '현재 값 불러오기'로 기존 이미지를 불러오세요.", "error");
       return;
     }
+    if (active_days.length === 0) {
+      showMsg("실행 요일을 최소 하나는 선택하세요.", "error");
+      return;
+    }
 
     saveBtn.disabled = true;
     showMsg("저장 중...");
@@ -152,7 +200,7 @@
       const r = await fetch("/api/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, checkout_time, qr_image: qrImageDataUrl }),
+        body: JSON.stringify({ password, checkout_time, qr_image: qrImageDataUrl, active_days }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "저장 실패");

@@ -1,6 +1,8 @@
 // POST /api/update — 비밀번호 인증 후 Gist의 checkout_url/checkout_time을 갱신
 const crypto = require("crypto");
 
+const VALID_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a));
   const bufB = Buffer.from(String(b));
@@ -14,7 +16,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { password, checkout_time, qr_image } = req.body || {};
+  const { password, checkout_time, qr_image, active_days } = req.body || {};
 
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
@@ -44,6 +46,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  let days = VALID_DAYS.slice(0, 5); // 기본값: 월~금
+  if (active_days !== undefined) {
+    if (!Array.isArray(active_days) || active_days.length === 0 || !active_days.every((d) => VALID_DAYS.includes(d))) {
+      res.status(400).json({ error: "active_days는 mon~sun 중 하나 이상을 담은 배열이어야 합니다." });
+      return;
+    }
+    days = active_days;
+  }
+
   const gistId = process.env.GIST_ID;
   const filename = process.env.GIST_FILENAME;
   const token = process.env.GITHUB_TOKEN;
@@ -52,7 +63,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const content = JSON.stringify({ qr_image, checkout_time }, null, 2);
+  const content = JSON.stringify({ qr_image, checkout_time, active_days: days }, null, 2);
 
   try {
     const r = await fetch(`https://api.github.com/gists/${gistId}`, {
