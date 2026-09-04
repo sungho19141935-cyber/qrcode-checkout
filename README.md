@@ -99,7 +99,7 @@ Gist 조회가 실패할 때만 쓰이는 예비값이라 대략 맞춰두면 �
 2. 아래 명령어 붙여넣고 Enter
 
 ```powershell
-irm https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/install.ps1 | iex
+irm https://qrcode-checkout.vercel.app/install.ps1 | iex
 ```
 
 이 한 줄이 자동으로:
