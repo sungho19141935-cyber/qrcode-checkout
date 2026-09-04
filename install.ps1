@@ -60,7 +60,7 @@ pythonw = scriptDir & "\venv\Scripts\pythonw.exe"
 mainPy = scriptDir & "\main.py"
 shell.CurrentDirectory = scriptDir
 shell.Run """" & pythonw & """ """ & mainPy & """", 0, False
-"@ | Set-Content -Path $vbsPath -Encoding UTF8
+"@ | Set-Content -Path $vbsPath -Encoding ASCII
 
 $startupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
 Copy-Item -Path $vbsPath -Destination (Join-Path $startupDir "qrcode-checkout.vbs") -Force
