@@ -42,7 +42,9 @@ Write-Host "    -> OK"
 
 Write-Step "[4/5] 가상환경 및 패키지 설치 중... (시간이 걸릴 수 있습니다)"
 Push-Location $InstallDir
-if (-not (Test-Path "venv")) {
+if (-not (Test-Path "venv\pyvenv.cfg")) {
+    # 이전 설치가 중간에 끊겨 venv가 불완전하게 남아있을 수 있으므로 통째로 새로 만든다
+    Remove-Item "venv" -Recurse -Force -ErrorAction SilentlyContinue
     python -m venv venv
 }
 & ".\venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
