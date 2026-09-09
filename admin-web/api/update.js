@@ -1,14 +1,7 @@
 // POST /api/update — 비밀번호 인증 후 Gist의 checkout_url/checkout_time을 갱신
-const crypto = require("crypto");
+const { verifyPassword } = require("./_auth");
 
 const VALID_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-
-function safeEqual(a, b) {
-  const bufA = Buffer.from(String(a));
-  const bufB = Buffer.from(String(b));
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,12 +11,14 @@ module.exports = async function handler(req, res) {
 
   const { password, checkout_time, qr_image, active_days, after_close_url } = req.body || {};
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
-    res.status(500).json({ error: "서버에 ADMIN_PASSWORD가 설정되지 않았습니다." });
+  let passwordOk;
+  try {
+    passwordOk = password ? await verifyPassword(password) : false;
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
     return;
   }
-  if (!password || !safeEqual(password, adminPassword)) {
+  if (!passwordOk) {
     res.status(401).json({ error: "비밀번호가 올바르지 않습니다." });
     return;
   }
