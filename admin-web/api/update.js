@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { password, checkout_time, qr_image, active_days } = req.body || {};
+  const { password, checkout_time, qr_image, active_days, after_close_url } = req.body || {};
 
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
@@ -55,6 +55,15 @@ module.exports = async function handler(req, res) {
     days = active_days;
   }
 
+  let closeUrl = "";
+  if (after_close_url) {
+    if (typeof after_close_url !== "string" || !/^https?:\/\//.test(after_close_url)) {
+      res.status(400).json({ error: "after_close_url은 http:// 또는 https://로 시작하는 URL이어야 합니다." });
+      return;
+    }
+    closeUrl = after_close_url;
+  }
+
   const gistId = process.env.GIST_ID;
   const filename = process.env.GIST_FILENAME;
   const token = process.env.GITHUB_TOKEN;
@@ -63,7 +72,11 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const content = JSON.stringify({ qr_image, checkout_time, active_days: days }, null, 2);
+  const content = JSON.stringify(
+    { qr_image, checkout_time, active_days: days, after_close_url: closeUrl },
+    null,
+    2
+  );
 
   try {
     const r = await fetch(`https://api.github.com/gists/${gistId}`, {

@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 import urllib.error
 import urllib.request
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -117,8 +118,14 @@ def show_qr_window(state: dict, title: str, display_seconds: int):
     def close(_event=None):
         root.destroy()
 
+    def close_by_click(_event=None):
+        root.destroy()
+        after_close_url = state.get("after_close_url")
+        if after_close_url:
+            webbrowser.open(after_close_url)
+
     root.bind("<Key>", close)
-    root.bind("<Button-1>", close)
+    root.bind("<Button-1>", close_by_click)
     root.after(display_seconds * 1000, close)
 
     root.mainloop()
@@ -135,6 +142,7 @@ def run_scheduler(config):
     state.setdefault("qr_image", config.get("qr_image"))
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
     state.setdefault("active_days", config.get("active_days", DEFAULT_ACTIVE_DAYS))
+    state.setdefault("after_close_url", config.get("after_close_url"))
 
     last_triggered_date = None
     last_fetch = 0.0
@@ -154,7 +162,9 @@ def run_scheduler(config):
                     "qr_image"
                 ) != state.get("qr_image") or remote.get("checkout_url") != state.get(
                     "checkout_url"
-                ) or remote.get("active_days") != state.get("active_days"):
+                ) or remote.get("active_days") != state.get(
+                    "active_days"
+                ) or remote.get("after_close_url") != state.get("after_close_url"):
                     print(
                         f"[QRcode] 설정 갱신됨 -> 시각: {remote.get('checkout_time')}, "
                         f"요일: {remote.get('active_days', state['active_days'])}"
@@ -163,6 +173,7 @@ def run_scheduler(config):
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
                 state["active_days"] = remote.get("active_days", state["active_days"])
+                state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
                 save_cache(state)
 
         now = datetime.now()
@@ -190,11 +201,13 @@ def main():
         state = load_cache()
         state.setdefault("checkout_url", config.get("checkout_url", ""))
         state.setdefault("qr_image", config.get("qr_image"))
+        state.setdefault("after_close_url", config.get("after_close_url"))
         if config.get("sync_url"):
             remote = fetch_remote_config(config["sync_url"])
             if remote:
                 state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
+                state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
         show_qr_window(
             state,
             config.get("window_title", "퇴실 QR코드"),
