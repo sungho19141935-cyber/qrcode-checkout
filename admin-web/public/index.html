@@ -28,13 +28,14 @@
     margin-top: 20px;
   }
   label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
-  input {
+  input, select {
     width: 100%;
     box-sizing: border-box;
     padding: 8px 10px;
     border: 1px solid #d0d7de;
     border-radius: 6px;
     font-size: 0.95rem;
+    font-family: inherit;
   }
   button {
     margin-top: 18px;
@@ -73,6 +74,8 @@
     .days label { border-color: #30363d; }
   }
   .days input { width: auto; margin: 0; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row button { margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -111,6 +114,28 @@
   </div>
 
   <p class="hint">저장하면 학생 프로그램은 몇 분 내로 자동으로 새 QR을 받아갑니다.</p>
+
+  <div class="card">
+    <label for="presetSelect">저장된 설정</label>
+    <select id="presetSelect"><option value="">(먼저 "목록 불러오기")</option></select>
+
+    <div class="btn-row">
+      <button id="presetRefreshBtn" class="secondary" type="button">목록 불러오기</button>
+      <button id="presetLoadBtn" class="secondary" type="button">불러오기</button>
+    </div>
+    <div class="btn-row">
+      <button id="presetRenameBtn" class="secondary" type="button">이름 변경</button>
+      <button id="presetDeleteBtn" class="secondary" type="button">삭제</button>
+    </div>
+
+    <label for="presetName">현재 값을 이 이름으로 새로 저장</label>
+    <input id="presetName" type="text" placeholder="예: 설정1" />
+    <button id="presetSaveBtn" type="button">새 설정으로 저장</button>
+
+    <div id="presetMsg" class="msg"></div>
+  </div>
+
+  <p class="hint">"불러오기"는 위 입력칸에 값을 채울 뿐, 학생들에게 반영하려면 위의 "저장" 버튼을 눌러야 합니다.</p>
 
   <div class="card">
     <label for="currentPw">현재 비밀번호</label>
@@ -240,6 +265,177 @@
       showMsg("오류: " + e.message, "error");
     } finally {
       saveBtn.disabled = false;
+    }
+  });
+
+  const presetSelectEl = document.getElementById("presetSelect");
+  const presetNameEl = document.getElementById("presetName");
+  const presetRefreshBtn = document.getElementById("presetRefreshBtn");
+  const presetLoadBtn = document.getElementById("presetLoadBtn");
+  const presetRenameBtn = document.getElementById("presetRenameBtn");
+  const presetDeleteBtn = document.getElementById("presetDeleteBtn");
+  const presetSaveBtn = document.getElementById("presetSaveBtn");
+  const presetMsgEl = document.getElementById("presetMsg");
+
+  let presetsCache = {};
+
+  function showPresetMsg(text, type) {
+    presetMsgEl.textContent = text;
+    presetMsgEl.className = "msg" + (type ? " " + type : "");
+  }
+
+  function renderPresetOptions() {
+    presetSelectEl.innerHTML = "";
+    const ids = Object.keys(presetsCache);
+    if (ids.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "(저장된 설정 없음)";
+      presetSelectEl.appendChild(opt);
+      return;
+    }
+    ids.forEach((id) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = presetsCache[id].name;
+      presetSelectEl.appendChild(opt);
+    });
+  }
+
+  async function callPresetsApi(body) {
+    const r = await fetch("/api/presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "요청 실패");
+    return data;
+  }
+
+  async function refreshPresets() {
+    const password = passwordEl.value.trim();
+    if (!password) {
+      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
+      return;
+    }
+    showPresetMsg("불러오는 중...");
+    try {
+      const data = await callPresetsApi({ password, action: "list" });
+      presetsCache = data.presets || {};
+      renderPresetOptions();
+      showPresetMsg(`${Object.keys(presetsCache).length}개 설정을 불러왔습니다.`, "ok");
+    } catch (e) {
+      showPresetMsg("오류: " + e.message, "error");
+    }
+  }
+
+  presetRefreshBtn.addEventListener("click", refreshPresets);
+
+  presetLoadBtn.addEventListener("click", () => {
+    const id = presetSelectEl.value;
+    if (!id || !presetsCache[id]) {
+      showPresetMsg("불러올 설정을 선택하세요.", "error");
+      return;
+    }
+    const p = presetsCache[id];
+    timeEl.value = p.checkout_time || "";
+    afterCloseUrlEl.value = p.after_close_url || "";
+    setActiveDays(p.active_days);
+    if (p.qr_image) {
+      previewEl.src = p.qr_image;
+      previewEl.style.display = "block";
+      qrImageDataUrl = p.qr_image;
+    }
+    showPresetMsg(`"${p.name}" 설정을 입력칸에 채웠습니다. "저장"을 눌러야 학생에게 반영됩니다.`, "ok");
+  });
+
+  presetSaveBtn.addEventListener("click", async () => {
+    const password = passwordEl.value.trim();
+    const name = presetNameEl.value.trim();
+    const checkout_time = timeEl.value.trim();
+    const active_days = getActiveDays();
+    const after_close_url = afterCloseUrlEl.value.trim();
+
+    if (!password) {
+      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
+      return;
+    }
+    if (!name) {
+      showPresetMsg("설정 이름을 입력하세요 (예: 설정1).", "error");
+      return;
+    }
+    if (!checkout_time || !qrImageDataUrl) {
+      showPresetMsg("저장할 QR 이미지와 시각을 먼저 채워주세요.", "error");
+      return;
+    }
+
+    presetSaveBtn.disabled = true;
+    showPresetMsg("저장 중...");
+    try {
+      await callPresetsApi({
+        password,
+        action: "save",
+        name,
+        checkout_time,
+        qr_image: qrImageDataUrl,
+        active_days,
+        after_close_url,
+      });
+      presetNameEl.value = "";
+      showPresetMsg(`"${name}" 이름으로 저장했습니다.`, "ok");
+      await refreshPresets();
+    } catch (e) {
+      showPresetMsg("오류: " + e.message, "error");
+    } finally {
+      presetSaveBtn.disabled = false;
+    }
+  });
+
+  presetRenameBtn.addEventListener("click", async () => {
+    const password = passwordEl.value.trim();
+    const id = presetSelectEl.value;
+    if (!password) {
+      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
+      return;
+    }
+    if (!id || !presetsCache[id]) {
+      showPresetMsg("이름을 바꿀 설정을 선택하세요.", "error");
+      return;
+    }
+    const newName = prompt("새 이름을 입력하세요.", presetsCache[id].name);
+    if (!newName || !newName.trim()) return;
+
+    showPresetMsg("변경 중...");
+    try {
+      await callPresetsApi({ password, action: "rename", id, name: newName.trim() });
+      showPresetMsg("이름을 변경했습니다.", "ok");
+      await refreshPresets();
+    } catch (e) {
+      showPresetMsg("오류: " + e.message, "error");
+    }
+  });
+
+  presetDeleteBtn.addEventListener("click", async () => {
+    const password = passwordEl.value.trim();
+    const id = presetSelectEl.value;
+    if (!password) {
+      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
+      return;
+    }
+    if (!id || !presetsCache[id]) {
+      showPresetMsg("삭제할 설정을 선택하세요.", "error");
+      return;
+    }
+    if (!confirm(`"${presetsCache[id].name}" 설정을 삭제할까요?`)) return;
+
+    showPresetMsg("삭제 중...");
+    try {
+      await callPresetsApi({ password, action: "delete", id });
+      showPresetMsg("삭제했습니다.", "ok");
+      await refreshPresets();
+    } catch (e) {
+      showPresetMsg("오류: " + e.message, "error");
     }
   });
 
