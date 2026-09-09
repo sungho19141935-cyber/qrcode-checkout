@@ -40,7 +40,14 @@ echo     -> OK
 echo.
 echo [4/4] Windows 시작프로그램 등록 중...
 set STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-copy /Y "%~dp0run_silent.vbs" "%STARTUP_DIR%\qrcode-checkout.vbs" >nul
+REM run_silent.vbs를 그대로 복사하면, 그 사본이 시작프로그램 폴더 자기 위치를
+REM 설치 폴더로 착각해서 실행이 깨진다. 그래서 이 설치 폴더 경로를 하드코딩한
+REM 새 스크립트를 시작프로그램 쪽에 따로 생성한다.
+(
+  echo Set shell = CreateObject("WScript.Shell"^)
+  echo shell.CurrentDirectory = "%~dp0"
+  echo shell.Run """%~dp0venv\Scripts\pythonw.exe"" ""%~dp0main.py""", 0, False
+) > "%STARTUP_DIR%\qrcode-checkout.vbs"
 echo     -> 등록 완료: 다음 부팅부터 자동으로 대기 상태가 됩니다.
 
 echo.

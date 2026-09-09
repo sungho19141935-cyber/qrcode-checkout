@@ -54,14 +54,15 @@ Write-Host "    -> OK"
 
 Write-Step "[5/5] Windows 시작프로그램 등록 중..."
 $vbsPath = Join-Path $InstallDir "run_silent.vbs"
+$pythonwPath = Join-Path $InstallDir "venv\Scripts\pythonw.exe"
+$mainPyPath = Join-Path $InstallDir "main.py"
+# 경로를 스크립트 자기 위치 기준(GetParentFolderName)으로 계산하면, 이 파일을
+# 시작프로그램 폴더에 복사했을 때 그 폴더를 설치 폴더로 착각해 실행이 깨진다.
+# 그래서 설치 경로를 아예 하드코딩해서 어디에 복사해도 항상 정확히 동작하게 한다.
 @"
-Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
-scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-pythonw = scriptDir & "\venv\Scripts\pythonw.exe"
-mainPy = scriptDir & "\main.py"
-shell.CurrentDirectory = scriptDir
-shell.Run """" & pythonw & """ """ & mainPy & """", 0, False
+shell.CurrentDirectory = "$InstallDir"
+shell.Run """$pythonwPath"" ""$mainPyPath""", 0, False
 "@ | Set-Content -Path $vbsPath -Encoding ASCII
 
 $startupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
