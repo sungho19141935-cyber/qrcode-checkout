@@ -16,17 +16,23 @@
   }
   @media (prefers-color-scheme: dark) {
     body { color: #e6edf3; background: #0d1117; }
-    input { background: #161b22; color: #e6edf3; border-color: #30363d; }
-    .card { background: #161b22; border-color: #30363d; }
+    input, select { background: #161b22; color: #e6edf3; border-color: #30363d; }
+    .card, details { background: #161b22; border-color: #30363d; }
   }
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
   p.sub { color: #656d76; margin-top: 0; font-size: 0.9rem; }
-  .card {
+  .card, details {
     border: 1px solid #d0d7de;
     border-radius: 10px;
     padding: 20px;
     margin-top: 20px;
   }
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  details[open] summary { margin-bottom: 8px; }
   label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
   input, select {
     width: 100%;
@@ -80,7 +86,7 @@
 </head>
 <body>
   <h1>퇴실 QR 관리자</h1>
-  <p class="sub">비밀번호로 로그인 후 QR URL과 퇴실 시각을 갱신하세요.</p>
+  <p class="sub">비밀번호로 로그인 후 QR 이미지와 퇴실 시각을 갱신하세요.</p>
 
   <div class="card">
     <label for="password">관리자 비밀번호</label>
@@ -104,7 +110,7 @@
       <label><input type="checkbox" value="sun" />일</label>
     </div>
 
-    <label for="afterCloseUrl">클릭해서 닫을 때 열릴 링크 (선택, 비워두면 그냥 닫힘)</label>
+    <label for="afterCloseUrl">클릭해서 닫을 때 열릴 링크 (선택)</label>
     <input id="afterCloseUrl" type="text" placeholder="https://..." />
 
     <button id="loadBtn" class="secondary" type="button">현재 값 불러오기</button>
@@ -113,31 +119,29 @@
     <div id="msg" class="msg"></div>
   </div>
 
-  <p class="hint">저장하면 학생 프로그램은 몇 분 내로 자동으로 새 QR을 받아갑니다.</p>
+  <p class="hint">저장하면 학생 프로그램은 1분 내로 자동으로 새 QR을 받아갑니다.</p>
 
-  <div class="card">
-    <label for="presetSelect">저장된 설정</label>
-    <select id="presetSelect"><option value="">(먼저 "목록 불러오기")</option></select>
+  <details id="presetsDetails">
+    <summary>저장된 설정 불러오기 / 저장하기</summary>
 
-    <div class="btn-row">
-      <button id="presetRefreshBtn" class="secondary" type="button">목록 불러오기</button>
-      <button id="presetLoadBtn" class="secondary" type="button">불러오기</button>
-    </div>
+    <label for="presetSelect">선택하면 바로 위 입력칸에 채워집니다</label>
+    <select id="presetSelect"><option value="">비밀번호 입력 후 펼치면 자동으로 불러옵니다</option></select>
+
     <div class="btn-row">
       <button id="presetRenameBtn" class="secondary" type="button">이름 변경</button>
       <button id="presetDeleteBtn" class="secondary" type="button">삭제</button>
     </div>
 
-    <label for="presetName">현재 값을 이 이름으로 새로 저장</label>
+    <label for="presetName">현재 값을 새 이름으로 저장</label>
     <input id="presetName" type="text" placeholder="예: 설정1" />
-    <button id="presetSaveBtn" type="button">새 설정으로 저장</button>
+    <button id="presetSaveBtn" class="secondary" type="button">저장</button>
 
     <div id="presetMsg" class="msg"></div>
-  </div>
+  </details>
 
-  <p class="hint">"불러오기"는 위 입력칸에 값을 채울 뿐, 학생들에게 반영하려면 위의 "저장" 버튼을 눌러야 합니다.</p>
+  <details id="pwDetails">
+    <summary>비밀번호 변경</summary>
 
-  <div class="card">
     <label for="currentPw">현재 비밀번호</label>
     <input id="currentPw" type="password" autocomplete="current-password" />
 
@@ -147,10 +151,10 @@
     <label for="newPw2">새 비밀번호 확인</label>
     <input id="newPw2" type="password" autocomplete="new-password" />
 
-    <button id="changePwBtn" class="secondary" type="button">비밀번호 변경</button>
+    <button id="changePwBtn" class="secondary" type="button">변경</button>
 
     <div id="pwMsg" class="msg"></div>
-  </div>
+  </details>
 
 <script>
   const msgEl = document.getElementById("msg");
@@ -268,10 +272,10 @@
     }
   });
 
+  // ---- 저장된 설정 (프리셋) ----
+  const presetsDetails = document.getElementById("presetsDetails");
   const presetSelectEl = document.getElementById("presetSelect");
   const presetNameEl = document.getElementById("presetName");
-  const presetRefreshBtn = document.getElementById("presetRefreshBtn");
-  const presetLoadBtn = document.getElementById("presetLoadBtn");
   const presetRenameBtn = document.getElementById("presetRenameBtn");
   const presetDeleteBtn = document.getElementById("presetDeleteBtn");
   const presetSaveBtn = document.getElementById("presetSaveBtn");
@@ -287,13 +291,10 @@
   function renderPresetOptions() {
     presetSelectEl.innerHTML = "";
     const ids = Object.keys(presetsCache);
-    if (ids.length === 0) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "(저장된 설정 없음)";
-      presetSelectEl.appendChild(opt);
-      return;
-    }
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = ids.length ? "선택하세요" : "(저장된 설정 없음)";
+    presetSelectEl.appendChild(placeholder);
     ids.forEach((id) => {
       const opt = document.createElement("option");
       opt.value = id;
@@ -324,20 +325,19 @@
       const data = await callPresetsApi({ password, action: "list" });
       presetsCache = data.presets || {};
       renderPresetOptions();
-      showPresetMsg(`${Object.keys(presetsCache).length}개 설정을 불러왔습니다.`, "ok");
+      showPresetMsg("");
     } catch (e) {
       showPresetMsg("오류: " + e.message, "error");
     }
   }
 
-  presetRefreshBtn.addEventListener("click", refreshPresets);
+  presetsDetails.addEventListener("toggle", () => {
+    if (presetsDetails.open) refreshPresets();
+  });
 
-  presetLoadBtn.addEventListener("click", () => {
+  presetSelectEl.addEventListener("change", () => {
     const id = presetSelectEl.value;
-    if (!id || !presetsCache[id]) {
-      showPresetMsg("불러올 설정을 선택하세요.", "error");
-      return;
-    }
+    if (!id || !presetsCache[id]) return;
     const p = presetsCache[id];
     timeEl.value = p.checkout_time || "";
     afterCloseUrlEl.value = p.after_close_url || "";
@@ -347,7 +347,7 @@
       previewEl.style.display = "block";
       qrImageDataUrl = p.qr_image;
     }
-    showPresetMsg(`"${p.name}" 설정을 입력칸에 채웠습니다. "저장"을 눌러야 학생에게 반영됩니다.`, "ok");
+    showPresetMsg(`"${p.name}" 설정을 위 입력칸에 채웠습니다. "저장"을 눌러야 학생에게 반영됩니다.`, "ok");
   });
 
   presetSaveBtn.addEventListener("click", async () => {
@@ -439,6 +439,7 @@
     }
   });
 
+  // ---- 비밀번호 변경 ----
   const currentPwEl = document.getElementById("currentPw");
   const newPwEl = document.getElementById("newPw");
   const newPw2El = document.getElementById("newPw2");
