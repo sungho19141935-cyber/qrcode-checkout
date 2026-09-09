@@ -323,11 +323,8 @@
     showPresetMsg("불러오는 중...");
     try {
       const data = await callPresetsApi({ password, action: "list" });
-      console.log("[debug] presets list response:", data);
       presetsCache = data.presets || {};
-      console.log("[debug] presetsCache keys:", Object.keys(presetsCache));
       renderPresetOptions();
-      console.log("[debug] select option count:", presetSelectEl.options.length);
       showPresetMsg("");
     } catch (e) {
       showPresetMsg("오류: " + e.message, "error");

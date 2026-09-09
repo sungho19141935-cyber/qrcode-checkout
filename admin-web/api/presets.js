@@ -19,9 +19,23 @@ async function fetchPresets() {
   if (!r.ok) throw new Error("프리셋 조회 실패");
   const data = await r.json();
   const file = data.files && data.files[PRESETS_FILENAME];
-  if (!file || !file.content) return {};
+  if (!file) return {};
+
+  // GitHub Gist API는 파일이 일정 크기를 넘으면 content를 잘라서 응답하고
+  // truncated: true를 표시한다 (QR 이미지가 여러 개 쌓이면 흔히 발생). 이 경우
+  // raw_url에서 잘리지 않은 전체 내용을 다시 받아와야 한다.
+  let content = file.content;
+  if (file.truncated) {
+    const rawR = await fetch(file.raw_url, {
+      headers: { Authorization: `token ${token}` },
+    });
+    if (!rawR.ok) throw new Error("프리셋 원본 조회 실패");
+    content = await rawR.text();
+  }
+  if (!content) return {};
+
   try {
-    return JSON.parse(file.content);
+    return JSON.parse(content);
   } catch {
     return {};
   }
@@ -93,6 +107,14 @@ module.exports = async function handler(req, res) {
     if (action === "save") {
       if (!name || !checkout_time || !qr_image) {
         res.status(400).json({ error: "설정 이름, 시각, QR 이미지는 필수입니다." });
+        return;
+      }
+      // 프리셋이 쌓일수록 admin_presets.json 전체 용량이 커져 Gist API의 truncation
+      // 한도를 넘기 쉬우므로, 이미지 한 장당 크기를 넉넉히 제한한다.
+      if (qr_image.length > 1_000_000) {
+        res.status(400).json({
+          error: "이미지가 너무 큽니다. 프리셋에는 500KB 이하로 압축/크롭한 이미지를 사용하세요.",
+        });
         return;
       }
       const presetId = id && presets[id] ? id : crypto.randomUUID();
