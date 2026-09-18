@@ -21,6 +21,7 @@ CACHE_PATH = Path(__file__).parent / "cache.json"
 
 DEFAULT_CHECKOUT_TIME = "18:00"
 DEFAULT_ACTIVE_DAYS = ["mon", "tue", "wed", "thu", "fri"]
+DEFAULT_CATCHUP_MINUTES = 120  # 절전/부팅 지연으로 정시를 놓쳤을 때 뒤늦게라도 띄우는 허용 범위
 WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]  # datetime.weekday() 순서
 
 
@@ -131,11 +132,35 @@ def show_qr_window(state: dict, title: str, display_seconds: int):
     root.mainloop()
 
 
+def parse_hhmm(value: str) -> Optional[int]:
+    """HH:MM 문자열을 자정 기준 분으로 변환. 형식이 틀리면 None."""
+    try:
+        hh, mm = value.split(":")
+        minutes = int(hh) * 60 + int(mm)
+    except (AttributeError, ValueError):
+        return None
+    return minutes if 0 <= minutes < 24 * 60 else None
+
+
+def should_trigger(now: datetime, checkout_time: str, catchup_minutes: int) -> bool:
+    """정시에 정확히 일치할 때만이 아니라, 정시를 지난 뒤 catchup_minutes 안이면 True.
+
+    15초 간격 폴링이라도 노트북이 절전에 들어가거나 부팅이 늦으면 해당 1분을
+    통째로 건너뛰어 그날 QR이 아예 뜨지 않는다. 지난 시각도 따라잡도록 한다.
+    """
+    target = parse_hhmm(checkout_time)
+    if target is None:
+        return False
+    current = now.hour * 60 + now.minute
+    return 0 <= current - target <= catchup_minutes
+
+
 def run_scheduler(config):
     sync_url = config.get("sync_url")
     fetch_interval = int(config.get("fetch_interval_seconds", 300))
     display_seconds = int(config.get("display_seconds", 600))
     window_title = config.get("window_title", "퇴실 QR코드")
+    catchup_minutes = int(config.get("catchup_minutes", DEFAULT_CATCHUP_MINUTES))
 
     state = load_cache()
     state.setdefault("checkout_url", config.get("checkout_url", ""))
@@ -182,9 +207,13 @@ def run_scheduler(config):
 
         today_key = WEEKDAY_KEYS[now.weekday()]
         is_active_day = today_key in state.get("active_days", DEFAULT_ACTIVE_DAYS)
-        if now_hm == state["checkout_time"] and last_triggered_date != today and is_active_day:
+        if (
+            last_triggered_date != today
+            and is_active_day
+            and should_trigger(now, state["checkout_time"], catchup_minutes)
+        ):
             last_triggered_date = today
-            print(f"[QRcode] {now_hm} 도달 - QR 화면 표시")
+            print(f"[QRcode] {now_hm} (설정 {state['checkout_time']}) - QR 화면 표시")
             show_qr_window(state, window_title, display_seconds)
 
         time.sleep(15)

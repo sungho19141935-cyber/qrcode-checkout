@@ -181,13 +181,28 @@ class AdminApp(tk.Tk):
             messagebox.showerror("오류", "모든 항목을 입력하세요.")
             return
 
+        # 기존 내용을 통째로 덮어쓰면 웹 관리자(admin-web)가 저장한 qr_image /
+        # active_days / after_close_url이 전부 날아간다. 먼저 현재 값을 읽어 병합한다.
         try:
-            raw_url = core.update_gist_file(
-                gist_id, filename, token, {"checkout_url": url, "checkout_time": time_str}
-            )
+            current = core.fetch_gist_file(gist_id, filename, token)
+        except urllib.error.URLError as e:
+            messagebox.showerror("조회 실패", f"기존 설정을 읽지 못해 중단했습니다.\n{e}")
+            return
+
+        updated = {**current, "checkout_url": url, "checkout_time": time_str}
+
+        try:
+            raw_url = core.update_gist_file(gist_id, filename, token, updated)
         except urllib.error.URLError as e:
             messagebox.showerror("갱신 실패", str(e))
             return
+
+        if current.get("qr_image"):
+            messagebox.showwarning(
+                "안내",
+                "현재 업로드된 QR 이미지가 있어 학생 화면에는 그 이미지가 표시됩니다.\n"
+                "URL 변경은 이미지가 없을 때만 반영됩니다. (이미지 교체는 웹 관리자에서)",
+            )
 
         self._persist_connection_fields()
         self.status_var.set(f"갱신 완료. 학생 PC는 다음 동기화 주기에 자동 반영됩니다.\n{raw_url}")

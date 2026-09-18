@@ -82,9 +82,13 @@ QR 이미지가 아직 한 번도 동기화되지 않았을 때만 쓰이는 URL
   "fetch_interval_seconds": 60,
   "checkout_time": "18:00",
   "display_seconds": 600,
+  "catchup_minutes": 120,
   "window_title": "퇴실 QR코드 - 스캔 후 아무 키나 눌러 닫기"
 }
 ```
+
+`catchup_minutes`는 절전/늦은 부팅으로 퇴실 시각을 놓쳤을 때 뒤늦게라도 QR을
+띄워주는 허용 범위(분)입니다. 기본값 120이며, 정시에만 띄우려면 `0`으로 두세요.
 
 이 `config.json`, `main.py`, `requirements.txt` (또는 exe로 빌드한 실행파일)만
 학생들에게 배포하면 됩니다. **`admin_update.py`와 `admin_config.json`은 절대

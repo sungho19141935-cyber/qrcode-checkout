@@ -157,7 +157,15 @@ def main():
     if not new_time:
         new_time = current.get("checkout_time", "18:00")
 
-    updated = {"checkout_url": new_url, "checkout_time": new_time}
+    # 기존 내용을 통째로 덮어쓰면 웹 관리자(admin-web)가 저장한 qr_image /
+    # active_days / after_close_url이 전부 날아간다. 반드시 병합해서 보낸다.
+    updated = {**current, "checkout_url": new_url, "checkout_time": new_time}
+
+    if current.get("qr_image"):
+        print(
+            "\n[안내] 현재 Gist에 업로드된 QR 이미지가 있어 학생 화면에는 그 이미지가 표시됩니다.\n"
+            "       checkout_url 변경은 이미지가 없을 때만 반영됩니다. (이미지 교체는 웹 관리자에서)"
+        )
 
     try:
         raw_url = update_gist_file(gist_id, gist_filename, token, updated)
