@@ -14,10 +14,23 @@ function Write-Step($msg) {
     Write-Host $msg -ForegroundColor Cyan
 }
 
-Write-Step "[1/5] 설치 폴더 준비 중... ($InstallDir)"
+Write-Step "[1/6] 기존에 실행 중인 프로그램 정리 중..."
+# 재설치 시 구버전 프로세스가 계속 살아 있으면 새로 띄운 인스턴스와 둘 다 동작해
+# 퇴실 시각에 QR 창이 두 개 뜬다. 또 실행 중인 venv 파일은 덮어쓰기가 막힌다.
+$running = Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' or Name='python.exe'" |
+  Where-Object { $_.CommandLine -like '*qrcode-checkout*' }
+if ($running) {
+    $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    $running | ForEach-Object { Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
+    Write-Host "    -> 이전 버전 $($running.Count)개를 종료했습니다."
+} else {
+    Write-Host "    -> 실행 중인 이전 버전 없음"
+}
+
+Write-Step "[2/6] 설치 폴더 준비 중... ($InstallDir)"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
-Write-Step "[2/5] 최신 프로그램 파일 다운로드 중..."
+Write-Step "[3/6] 최신 프로그램 파일 다운로드 중..."
 foreach ($f in $Files) {
     $dest = Join-Path $InstallDir $f
     if ($f -eq "config.json" -and (Test-Path $dest)) {
@@ -27,7 +40,7 @@ foreach ($f in $Files) {
     Invoke-WebRequest -Uri "$RepoRaw/$f" -OutFile $dest -UseBasicParsing
 }
 
-Write-Step "[3/5] Python 설치 확인 중..."
+Write-Step "[4/6] Python 설치 확인 중..."
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
     Write-Host ""
@@ -40,7 +53,7 @@ if (-not $python) {
 }
 Write-Host "    -> OK"
 
-Write-Step "[4/5] 가상환경 및 패키지 설치 중... (시간이 걸릴 수 있습니다)"
+Write-Step "[5/6] 가상환경 및 패키지 설치 중... (시간이 걸릴 수 있습니다)"
 Push-Location $InstallDir
 if (-not (Test-Path "venv\pyvenv.cfg")) {
     # 이전 설치가 중간에 끊겨 venv가 불완전하게 남아있을 수 있으므로 통째로 새로 만든다
@@ -52,7 +65,7 @@ if (-not (Test-Path "venv\pyvenv.cfg")) {
 Pop-Location
 Write-Host "    -> OK"
 
-Write-Step "[5/5] Windows 시작프로그램 등록 중..."
+Write-Step "[6/6] Windows 시작프로그램 등록 중..."
 $vbsPath = Join-Path $InstallDir "run_silent.vbs"
 $pythonwPath = Join-Path $InstallDir "venv\Scripts\pythonw.exe"
 $mainPyPath = Join-Path $InstallDir "main.py"
