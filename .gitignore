@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.pyc
 cache.json
+qrcode.log
 admin_config.json
 dist/
 build/
