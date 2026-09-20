@@ -1,16 +1,7 @@
 {
   "headers": [
     {
-      "source": "/install.ps1",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/plain; charset=utf-8"
-        }
-      ]
-    },
-    {
-      "source": "/uninstall.ps1",
+      "source": "/(.*)\\.ps1",
       "headers": [
         {
           "key": "Content-Type",
