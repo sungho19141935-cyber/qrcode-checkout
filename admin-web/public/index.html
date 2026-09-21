@@ -140,6 +140,23 @@
   @media (prefers-color-scheme: dark) { .imgstate .tag.custom { color: #7ee2a0; } }
   .entry .drop { width: 72px; height: 72px; }
 
+  #sumTop { display: flex; gap: 18px; align-items: flex-start; }
+  #sumQrBox { width: 110px; height: 110px; flex: none; border-radius: 10px;
+    background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #sumQrBox img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  #sumLists { flex: 1; min-width: 0; }
+  .sumgroup { margin-bottom: 14px; }
+  .sumgroup:last-child { margin-bottom: 0; }
+  .sumgroup h3 {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--muted); margin: 0 0 6px; font-weight: 700;
+  }
+  .sumrow { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; font-size: 0.92rem; }
+  .sumrow .tm { font-weight: 700; min-width: 52px; }
+  .sumrow .dt { color: var(--muted); font-size: 0.84rem; word-break: break-all; }
+  .sumrow img { width: 26px; height: 26px; object-fit: contain; background: #fff; border-radius: 4px; }
+  .sub-muted { color: var(--muted); font-size: 0.8rem; }
+  #editBtn { margin-top: 20px; }
   .sectionhint { font-size: 0.82rem; color: var(--muted); margin: -6px 0 12px; }
   .empty { font-size: 0.85rem; color: var(--muted); text-align: center; padding: 14px 0; margin: 0; }
   .addrow { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
@@ -216,6 +233,34 @@
 
   <!-- 편집 화면 -->
   <main id="editor" hidden>
+
+    <!-- 보기 모드 -->
+    <section id="summary">
+      <div class="panel">
+        <h2>지금 적용 중인 설정</h2>
+        <div id="sumTop">
+          <div id="sumQrBox"><span class="sub-muted">QR 없음</span></div>
+          <div id="sumLists">
+            <div class="sumgroup">
+              <h3>퇴실 시각</h3>
+              <div id="sumCheckouts">불러오는 중...</div>
+            </div>
+            <div class="sumgroup" id="sumNoticeGroup">
+              <h3>공지</h3>
+              <div id="sumNotices"></div>
+            </div>
+            <div class="sumgroup">
+              <h3>실행 요일</h3>
+              <div id="sumDays"></div>
+            </div>
+          </div>
+        </div>
+        <button id="editBtn" class="block">수정하기</button>
+      </div>
+    </section>
+
+    <!-- 편집 모드 -->
+    <section id="editPanels" hidden>
     <div class="panel">
       <h2>기본 QR</h2>
       <div id="baseRow">
@@ -256,7 +301,7 @@
       <div id="saveSummary"></div>
       <div id="saveArea">
         <button id="saveBtn">저장</button>
-        <button class="ghost" id="resetBtn">되돌리기</button>
+        <button class="ghost" id="resetBtn">취소</button>
       </div>
     </div>
 
@@ -264,6 +309,8 @@
       <h2>실행 요일</h2>
       <div class="days" id="days"></div>
     </div>
+
+    </section>
 
     <details class="panel" id="presetsPanel">
       <summary>저장된 설정 (프리셋)</summary>
@@ -516,7 +563,7 @@
       drop.appendChild(span);
     }
     drop.appendChild(file);
-    $("baseEditBtn").textContent = baseImage ? "수정하기" : "등록하기";
+    $("baseEditBtn").textContent = baseImage ? "이미지 교체" : "이미지 등록";
     [...$("checkoutList").children, ...$("noticeList").children]
       .forEach((el) => el.repaint && el.repaint());
   }
@@ -649,6 +696,73 @@
     return data;
   }
 
+  const DAY_ORDER = DAYS.map(([v]) => v);
+
+  function renderSummary(data) {
+    const entries = toEntries(data);
+    const base = liveBase(data);
+    const qrBox = $("sumQrBox");
+    qrBox.innerHTML = "";
+    if (base) {
+      const img = document.createElement("img");
+      img.src = base;
+      qrBox.appendChild(img);
+    } else {
+      const span = document.createElement("span");
+      span.className = "sub-muted";
+      span.textContent = "QR 없음";
+      qrBox.appendChild(span);
+    }
+
+    function rows(list, box, emptyText) {
+      box.innerHTML = "";
+      if (!list.length) {
+        const p = document.createElement("div");
+        p.className = "sub-muted";
+        p.textContent = emptyText;
+        box.appendChild(p);
+        return;
+      }
+      list.forEach((e) => {
+        const row = document.createElement("div");
+        row.className = "sumrow";
+        if (e.kind === "notice" && e.qr_image) {
+          const img = document.createElement("img");
+          img.src = e.qr_image;
+          row.appendChild(img);
+        }
+        const tm = document.createElement("span");
+        tm.className = "tm";
+        tm.textContent = e.time;
+        row.appendChild(tm);
+        const dt = document.createElement("span");
+        dt.className = "dt";
+        dt.textContent = e.message || (e.kind === "notice" ? "이미지" : "기본 QR");
+        row.appendChild(dt);
+        box.appendChild(row);
+      });
+    }
+
+    rows(entries.filter((e) => e.kind !== "notice"), $("sumCheckouts"), "등록된 퇴실 시각이 없습니다.");
+    rows(entries.filter((e) => e.kind === "notice"), $("sumNotices"), "없음");
+
+    const days = data.active_days || [];
+    $("sumDays").textContent = DAY_ORDER.filter((d) => days.includes(d))
+      .map((d) => DAY_LABEL[d])
+      .join(" ") || "-";
+  }
+
+  function showView() {
+    $("summary").hidden = false;
+    $("editPanels").hidden = true;
+    renderSummary(live);
+  }
+
+  function showEdit() {
+    $("summary").hidden = true;
+    $("editPanels").hidden = false;
+  }
+
   async function loadLive() {
     const r = await fetch("/api/current?t=" + Date.now());
     const data = await r.json();
@@ -664,6 +778,7 @@
       ? "현재 " + times.join(", ") + " 에 표시됩니다."
       : "아직 등록된 일정이 없습니다.";
     // 여러 개 등록했을 때, 아직 재설치하지 않은 PC는 하나만 받는다는 사실을 알린다
+    if (!$("summary").hidden) renderSummary(data);
     $("legacyNote").textContent =
       times.length > 1
         ? "아직 프로그램을 업데이트하지 않은 학생 PC에는 마지막 시각(" +
@@ -684,6 +799,7 @@
       $("lock").hidden = true;
       $("editor").hidden = false;
       await loadLive();
+      showView();
       setMsg($("lockMsg"), "");
     } catch (e) {
       setMsg($("lockMsg"), e.message, "error");
@@ -694,6 +810,15 @@
 
   $("unlockBtn").addEventListener("click", unlock);
   $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+
+  $("editBtn").addEventListener("click", () => {
+    renderEntries(toEntries(live));   // 편집을 열 때는 항상 저장된 값에서 시작한다
+    renderDays(live.active_days);
+    baseImage = liveBase(live);
+    paintBase();
+    refreshDirty();
+    showEdit();
+  });
 
   $("addCheckoutBtn").addEventListener("click", () => {
     addEntry({}, "checkout");
@@ -710,7 +835,7 @@
     renderEntries(toEntries(live));
     renderDays(live.active_days);
     refreshDirty();
-    toast("되돌렸습니다");
+    showView();
   });
 
   $("saveBtn").addEventListener("click", async () => {
@@ -742,6 +867,7 @@
     try {
       await api("/api/update", { password, schedule, qr_image: baseImage, active_days: getDays() });
       await loadLive();
+      showView();
       toast("저장했습니다 · 학생 PC에 1분 내 반영");
     } catch (e) {
       toast(e.message, true);
@@ -786,6 +912,7 @@
     if (!p) return;
     baseImage = liveBase(p) || baseImage;
     paintBase();
+    showEdit();
     renderEntries(toEntries(p));
     renderDays(p.active_days);
     refreshDirty();
