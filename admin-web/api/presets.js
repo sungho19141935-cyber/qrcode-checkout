@@ -72,6 +72,7 @@ module.exports = async function handler(req, res) {
     id,
     name,
     checkout_time,
+    checkout_times,
     qr_image,
     active_days,
     after_close_url,
@@ -118,9 +119,13 @@ module.exports = async function handler(req, res) {
         return;
       }
       const presetId = id && presets[id] ? id : crypto.randomUUID();
+      const times = Array.isArray(checkout_times) && checkout_times.length
+        ? checkout_times
+        : String(checkout_time || "").split(",").map((t) => t.trim()).filter(Boolean);
       presets[presetId] = {
         name,
-        checkout_time,
+        checkout_time: times[0] || checkout_time,
+        checkout_times: times,
         qr_image,
         active_days: Array.isArray(active_days) && active_days.length
           ? active_days

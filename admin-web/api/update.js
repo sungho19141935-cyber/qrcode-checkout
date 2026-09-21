@@ -9,7 +9,8 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { password, checkout_time, qr_image, active_days, after_close_url } = req.body || {};
+  const { password, checkout_time, checkout_times, qr_image, active_days, after_close_url } =
+    req.body || {};
 
   let passwordOk;
   try {
@@ -23,12 +24,23 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  if (!checkout_time || !qr_image) {
-    res.status(400).json({ error: "QR 이미지와 checkout_time을 모두 입력하세요." });
+  // 시각은 여러 개를 받을 수 있다. 구 형식(checkout_time 하나)도 그대로 받아들인다.
+  const rawTimes = Array.isArray(checkout_times)
+    ? checkout_times
+    : String(checkout_times || checkout_time || "").split(",");
+  const times = [...new Set(rawTimes.map((t) => String(t).trim()).filter(Boolean))].sort();
+
+  if (!times.length || !qr_image) {
+    res.status(400).json({ error: "QR 이미지와 퇴실 시각을 모두 입력하세요." });
     return;
   }
-  if (!/^\d{2}:\d{2}$/.test(checkout_time)) {
-    res.status(400).json({ error: "checkout_time은 HH:MM 형식이어야 합니다." });
+  const badTime = times.find((t) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t));
+  if (badTime) {
+    res.status(400).json({ error: `퇴실 시각은 HH:MM 형식이어야 합니다: "${badTime}"` });
+    return;
+  }
+  if (times.length > 10) {
+    res.status(400).json({ error: "퇴실 시각은 최대 10개까지 저장할 수 있습니다." });
     return;
   }
   if (!/^data:image\/(png|jpeg|jpg|webp);base64,/.test(qr_image)) {
@@ -67,8 +79,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  // checkout_time(첫 시각)은 자동 업데이트 전인 구버전 학생 프로그램을 위해 함께 남긴다.
   const content = JSON.stringify(
-    { qr_image, checkout_time, active_days: days, after_close_url: closeUrl },
+    {
+      qr_image,
+      checkout_time: times[0],
+      checkout_times: times,
+      active_days: days,
+      after_close_url: closeUrl,
+    },
     null,
     2
   );

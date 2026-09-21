@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.1.3"
+VERSION = "1.2.0"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -174,6 +174,41 @@ def parse_hhmm(value: str) -> Optional[int]:
     except (AttributeError, ValueError):
         return None
     return minutes if 0 <= minutes < 24 * 60 else None
+
+
+def normalize_times(value) -> list:
+    """설정에서 읽은 퇴실 시각을 정렬된 HH:MM 목록으로 만든다.
+
+    문자열 하나("18:00"), 쉼표로 이어진 문자열("12:00,18:00"), 리스트를 모두 받는다.
+    형식이 틀린 값은 버린다.
+    """
+    if value is None:
+        return []
+    items = value if isinstance(value, list) else str(value).split(",")
+    out = []
+    for item in items:
+        text = str(item).strip()
+        if parse_hhmm(text) is not None and text not in out:
+            out.append(text)
+    return sorted(out, key=parse_hhmm)
+
+
+def times_of(state: dict) -> list:
+    """state에서 쓸 퇴실 시각 목록. 구 설정(checkout_time 하나)도 그대로 동작한다."""
+    times = normalize_times(state.get("checkout_times"))
+    if times:
+        return times
+    return normalize_times(state.get("checkout_time"))
+
+
+def due_time(now: datetime, times: list, done_today: set, catchup_minutes: int) -> Optional[str]:
+    """지금 띄워야 할 시각을 고른다. 없으면 None.
+
+    여러 시각을 한꺼번에 놓친 경우(노트북을 오래 꺼둔 경우) 창을 여러 개 띄우지 않고
+    가장 최근에 지난 것 하나만 띄운다. 나머지는 호출한 쪽에서 소진 처리한다.
+    """
+    candidates = [t for t in times if t not in done_today and should_trigger(now, t, catchup_minutes)]
+    return candidates[-1] if candidates else None
 
 
 def should_trigger(now: datetime, checkout_time: str, catchup_minutes: int) -> bool:
@@ -360,16 +395,18 @@ def run_scheduler(config):
     state.setdefault("checkout_url", config.get("checkout_url", ""))
     state.setdefault("qr_image", config.get("qr_image"))
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
+    state.setdefault("checkout_times", config.get("checkout_times"))
     state.setdefault("active_days", config.get("active_days", DEFAULT_ACTIVE_DAYS))
     state.setdefault("after_close_url", config.get("after_close_url"))
 
-    last_triggered_date = None
+    triggered_date = None  # done_today가 어느 날짜의 기록인지
+    done_today = set()  # 오늘 이미 띄운 시각들
     last_fetch = 0.0
     last_update_check = 0.0
     synced_once = False
 
     log(
-        f"[QRcode] 시작 v{VERSION} - 예정 시각 {state['checkout_time']}, "
+        f"[QRcode] 시작 v{VERSION} - 예정 시각 {', '.join(times_of(state)) or '없음'}, "
         f"요일 {state.get('active_days')}, 따라잡기 {catchup_minutes}분"
     )
     if sync_url:
@@ -391,11 +428,14 @@ def run_scheduler(config):
                 # 관리자가 퇴실 시각을 새로 저장했다면 오늘치를 다시 준비한다.
                 # 이걸 안 하면 "오늘 이미 띄웠음" 표시 때문에, 시각을 바꿔 저장해도
                 # 그날은 아무리 기다려도 안 뜬다 (관리자 입장에선 고장으로 보인다).
-                new_time = remote.get("checkout_time")
-                if new_time and new_time != state.get("checkout_time"):
-                    if last_triggered_date is not None:
-                        log(f"[QRcode] 퇴실 시각이 {new_time}(으)로 변경되어 오늘 표시를 다시 준비합니다.")
-                    last_triggered_date = None
+                new_times = times_of(remote)
+                if new_times and new_times != times_of(state):
+                    if done_today:
+                        log(
+                            f"[QRcode] 퇴실 시각이 {', '.join(new_times)}(으)로 변경되어 "
+                            "오늘 표시를 다시 준비합니다."
+                        )
+                    done_today = set()
                 if not synced_once:
                     synced_once = True
                     log(f"[QRcode] 중앙 설정 첫 동기화 성공 (시각 {remote.get('checkout_time')})")
@@ -407,12 +447,13 @@ def run_scheduler(config):
                     "active_days"
                 ) or remote.get("after_close_url") != state.get("after_close_url"):
                     log(
-                        f"[QRcode] 설정 갱신됨 -> 시각: {remote.get('checkout_time')}, "
+                        f"[QRcode] 설정 갱신됨 -> 시각: {', '.join(times_of(remote)) or '없음'}, "
                         f"요일: {remote.get('active_days', state['active_days'])}"
                     )
                 state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
+                state["checkout_times"] = remote.get("checkout_times", state.get("checkout_times"))
                 state["active_days"] = remote.get("active_days", state["active_days"])
                 state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
                 save_cache(state)
@@ -423,14 +464,22 @@ def run_scheduler(config):
 
         today_key = WEEKDAY_KEYS[now.weekday()]
         is_active_day = today_key in state.get("active_days", DEFAULT_ACTIVE_DAYS)
-        if (
-            last_triggered_date != today
-            and is_active_day
-            and should_trigger(now, state["checkout_time"], catchup_minutes)
-        ):
-            last_triggered_date = today
-            log(f"[QRcode] {now_hm} (설정 {state['checkout_time']}) - QR 화면 표시")
-            show_qr_window(state, window_title, display_seconds)
+
+        if triggered_date != today:  # 날짜가 바뀌면 오늘치를 새로 시작
+            triggered_date = today
+            done_today = set()
+
+        if is_active_day:
+            times = times_of(state)
+            target = due_time(now, times, done_today, catchup_minutes)
+            if target:
+                # 한꺼번에 여러 시각을 놓쳤어도 창은 하나만 띄우고, 지나간 것들은
+                # 오늘치를 쓴 것으로 처리한다 (창이 연달아 여러 개 뜨지 않도록).
+                done_today.update(
+                    t for t in times if parse_hhmm(t) <= parse_hhmm(target)
+                )
+                log(f"[QRcode] {now_hm} (설정 {target}) - QR 화면 표시")
+                show_qr_window(state, window_title, display_seconds)
 
         time.sleep(15)
 
@@ -459,6 +508,14 @@ def main():
         assert should_trigger(datetime(2026, 1, 1, 18, 0), "18:00", 0), "정시 트리거 오류"
         assert should_trigger(datetime(2026, 1, 1, 18, 30), "18:00", 120), "따라잡기 오류"
         assert not should_trigger(datetime(2026, 1, 1, 17, 59), "18:00", 120), "이른 트리거 오류"
+        assert normalize_times("12:00, 18:00") == ["12:00", "18:00"], "시각 목록 파싱 오류"
+        assert normalize_times(["18:00", "09:00"]) == ["09:00", "18:00"], "시각 목록 정렬 오류"
+        assert normalize_times("이상한값") == [], "잘못된 시각 처리 오류"
+        assert times_of({"checkout_time": "18:00"}) == ["18:00"], "구 설정 호환 오류"
+        _t = ["09:00", "18:00"]
+        assert due_time(datetime(2026, 1, 1, 18, 0), _t, set(), 120) == "18:00", "시각 선택 오류"
+        assert due_time(datetime(2026, 1, 1, 9, 0), _t, set(), 120) == "09:00", "시각 선택 오류"
+        assert due_time(datetime(2026, 1, 1, 18, 0), _t, {"18:00"}, 120) is None, "중복 표시 오류"
         make_qr_image("https://example.com/selftest")  # 이미지 생성 경로
         int(config.get("display_seconds", 600))
         print(f"selftest OK (v{VERSION})")
