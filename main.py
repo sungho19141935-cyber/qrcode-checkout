@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -388,6 +388,14 @@ def run_scheduler(config):
             last_fetch = now_ts
             remote = fetch_remote_config(sync_url)
             if remote:
+                # 관리자가 퇴실 시각을 새로 저장했다면 오늘치를 다시 준비한다.
+                # 이걸 안 하면 "오늘 이미 띄웠음" 표시 때문에, 시각을 바꿔 저장해도
+                # 그날은 아무리 기다려도 안 뜬다 (관리자 입장에선 고장으로 보인다).
+                new_time = remote.get("checkout_time")
+                if new_time and new_time != state.get("checkout_time"):
+                    if last_triggered_date is not None:
+                        log(f"[QRcode] 퇴실 시각이 {new_time}(으)로 변경되어 오늘 표시를 다시 준비합니다.")
+                    last_triggered_date = None
                 if not synced_once:
                     synced_once = True
                     log(f"[QRcode] 중앙 설정 첫 동기화 성공 (시각 {remote.get('checkout_time')})")
