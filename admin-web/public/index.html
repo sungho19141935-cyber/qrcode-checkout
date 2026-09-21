@@ -280,7 +280,6 @@
       <h2>퇴실 시각</h2>
       <p class="sectionhint">이 시각에 기본 QR이 표시됩니다.</p>
       <div id="checkoutList"></div>
-      <button class="addrow" id="addCheckoutBtn">+ 퇴실 시각 추가</button>
       <p id="legacyNote" class="hintline"></p>
     </div>
 
@@ -528,6 +527,7 @@
       // 퇴실 시각의 QR은 위 "기본 QR" 한 곳에서만 관리한다.
       // 행마다 이미지 칸을 두면 같은 일을 두 군데서 하게 되어 헷갈린다.
       el.classList.add("timeonly");
+      el.querySelector(".remove").remove();   // 퇴실은 하나뿐이라 지울 대상이 아니다
       drop.remove();
       el.querySelector(".imgstate").remove();
       // 예전 화면에서 이 시각에만 지정해둔 이미지가 있으면 놓아준다.
@@ -817,10 +817,6 @@
     showEdit();
   });
 
-  $("addCheckoutBtn").addEventListener("click", () => {
-    addEntry({}, "checkout");
-    refreshDirty();
-  });
   $("addNoticeBtn").addEventListener("click", () => {
     addEntry({}, "notice");
     updateNoticeEmpty();
