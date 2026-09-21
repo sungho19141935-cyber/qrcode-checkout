@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -328,6 +328,16 @@ def check_for_update(update_url: str) -> bool:
     if problem:
         log(f"[QRcode] 업데이트 거부 - {problem}")
         return False
+
+    # 디스크의 main.py가 이미 새 버전인 경우(다른 인스턴스가 먼저 교체했거나, 재시작에
+    # 실패해 구버전이 메모리에 남아있는 경우)에는 다시 쓰지 않는다. 그대로 덮어쓰면
+    # 멀쩡한 이전 버전 백업이 같은 내용으로 지워진다.
+    try:
+        if Path(__file__).resolve().read_bytes().replace(b"\r\n", b"\n") == source:
+            log(f"[QRcode] 파일은 이미 v{remote_version}입니다. 재시작만 합니다.")
+            return True
+    except OSError:
+        pass
 
     if not apply_update(source):
         return False
