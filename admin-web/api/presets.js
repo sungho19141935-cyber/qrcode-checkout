@@ -112,6 +112,7 @@ module.exports = async function handler(req, res) {
         ? schedule.map((e) => ({
             time: String((e && e.time) || "").trim(),
             qr_image: (e && e.qr_image) || "",
+            message: String((e && e.message) || "").trim(),
             after_close_url: String((e && e.after_close_url) || "").trim(),
           }))
         : (Array.isArray(checkout_times) && checkout_times.length
@@ -126,13 +127,14 @@ module.exports = async function handler(req, res) {
               after_close_url: String(after_close_url || "").trim(),
             }));
 
-      if (!name || !entries.length || entries.some((e) => !e.time || !e.qr_image)) {
+      const base = qr_image || "";
+      if (!name || !entries.length || entries.some((e) => !e.time) || !(base || entries.every((e) => e.qr_image))) {
         res.status(400).json({ error: "설정 이름, 시각, QR 이미지는 필수입니다." });
         return;
       }
       // 프리셋이 쌓일수록 admin_presets.json 전체 용량이 커져 Gist API의 truncation
       // 한도를 넘기 쉬우므로, 프리셋 하나당 이미지 합계를 넉넉히 제한한다.
-      const totalBytes = entries.reduce((n, e) => n + e.qr_image.length, 0);
+      const totalBytes = base.length + entries.reduce((n, e) => n + e.qr_image.length, 0);
       if (totalBytes > 1_500_000) {
         res.status(400).json({
           error: "이미지가 너무 큽니다. 프리셋에는 작게 압축/크롭한 이미지를 사용하세요.",
@@ -145,10 +147,11 @@ module.exports = async function handler(req, res) {
       presets[presetId] = {
         name,
         schedule: entries,
+        base_qr_image: base,
         // 구 형식으로도 함께 남긴다 (update.js와 같은 기준: 마지막 시각이 대표)
         checkout_time: entries[entries.length - 1].time,
         checkout_times: entries.map((e) => e.time),
-        qr_image: entries[entries.length - 1].qr_image,
+        qr_image: entries[entries.length - 1].qr_image || base,
         after_close_url: entries[entries.length - 1].after_close_url,
         active_days: Array.isArray(active_days) && active_days.length
           ? active_days

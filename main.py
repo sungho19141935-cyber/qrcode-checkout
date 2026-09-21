@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -139,7 +139,20 @@ def show_qr_window(state: dict, title: str, display_seconds: int):
     photo = ImageTk.PhotoImage(img)
 
     label_title = tk.Label(root, text=title, font=("Malgun Gothic", 24, "bold"), bg="white")
-    label_title.pack(pady=(40, 10))
+    label_title.pack(pady=(40, 6))
+
+    # 관리자가 이 시각에만 따로 적어둔 안내 문구 (없으면 표시하지 않는다)
+    message = (state.get("message") or "").strip()
+    if message:
+        tk.Label(
+            root,
+            text=message,
+            font=("Malgun Gothic", 17),
+            bg="white",
+            fg="#9a6700",
+            wraplength=900,
+            justify="center",
+        ).pack(pady=(0, 10))
 
     label_img = tk.Label(root, image=photo, bg="white")
     label_img.pack(expand=True)
@@ -213,7 +226,15 @@ def schedule_of(state: dict) -> list:
     def entry(time_text, source):
         return {
             "time": time_text,
-            "qr_image": source.get("qr_image") or state.get("qr_image"),
+            # 항목에 이미지가 없으면 기본 QR을 그대로 쓴다 (관리자가 매번 안 붙여도 되도록).
+            # base_qr_image는 기본 QR 전용 칸이고, qr_image는 구버전 호환용이라
+            # 마지막 항목의 이미지가 들어갈 수 있어 기본값으로는 뒤에 둔다.
+            "qr_image": (
+                source.get("qr_image")
+                or state.get("base_qr_image")
+                or state.get("qr_image")
+            ),
+            "message": source.get("message") or "",
             "checkout_url": source.get("checkout_url") or state.get("checkout_url", ""),
             "after_close_url": (
                 source.get("after_close_url")
@@ -435,6 +456,7 @@ def run_scheduler(config):
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
     state.setdefault("checkout_times", config.get("checkout_times"))
     state.setdefault("schedule", config.get("schedule"))
+    state.setdefault("base_qr_image", config.get("base_qr_image"))
     state.setdefault("active_days", config.get("active_days", DEFAULT_ACTIVE_DAYS))
     state.setdefault("after_close_url", config.get("after_close_url"))
 
@@ -496,6 +518,7 @@ def run_scheduler(config):
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
                 state["checkout_times"] = remote.get("checkout_times", state.get("checkout_times"))
                 state["schedule"] = remote.get("schedule", state.get("schedule"))
+                state["base_qr_image"] = remote.get("base_qr_image", state.get("base_qr_image"))
                 state["active_days"] = remote.get("active_days", state["active_days"])
                 state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
                 save_cache(state)
@@ -571,6 +594,11 @@ def main():
         assert _sched[0]["after_close_url"] == "a", "시각별 링크 오류"
         _inherit = schedule_of({"schedule": [{"time": "09:00"}], "qr_image": "공용"})
         assert _inherit[0]["qr_image"] == "공용", "공용 이미지 상속 오류"
+        assert _inherit[0]["message"] == "", "문구 기본값 오류"
+        _msg = schedule_of({"schedule": [{"time": "09:00", "message": "특강"}], "qr_image": "공용"})
+        assert _msg[0]["message"] == "특강" and _msg[0]["qr_image"] == "공용", "문구/상속 조합 오류"
+        _base = schedule_of({"schedule": [{"time": "09:00"}], "base_qr_image": "기본", "qr_image": "구버전"})
+        assert _base[0]["qr_image"] == "기본", "기본 QR 우선순위 오류"
         _legacy = schedule_of({"checkout_times": ["09:00", "18:00"], "qr_image": "공용"})
         assert len(_legacy) == 2 and _legacy[1]["qr_image"] == "공용", "구 형식 호환 오류"
         make_qr_image("https://example.com/selftest")  # 이미지 생성 경로

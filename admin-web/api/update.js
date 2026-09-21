@@ -24,6 +24,8 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  // 기본 QR: 한 번 등록하면 계속 유지되고, 항목에 따로 이미지가 없으면 이게 표시된다.
+  const baseImage = qr_image || "";
   const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
   const IMAGE_RE = /^data:image\/(png|jpeg|jpg|webp);base64,/;
   const URL_RE = /^https?:\/\//;
@@ -33,7 +35,9 @@ module.exports = async function handler(req, res) {
   if (Array.isArray(schedule) && schedule.length) {
     entries = schedule.map((e) => ({
       time: String((e && e.time) || "").trim(),
+      // 항목별 이미지는 선택 사항이다. 비워두면 기본 QR(qr_image)을 쓴다.
       qr_image: (e && e.qr_image) || "",
+      message: String((e && e.message) || "").trim(),
       after_close_url: String((e && e.after_close_url) || "").trim(),
     }));
   } else {
@@ -47,6 +51,10 @@ module.exports = async function handler(req, res) {
     }));
   }
 
+  if (baseImage && !IMAGE_RE.test(baseImage)) {
+    res.status(400).json({ error: "기본 QR은 이미지 파일이어야 합니다." });
+    return;
+  }
   if (!entries.length) {
     res.status(400).json({ error: "퇴실 시각을 최소 하나는 등록하세요." });
     return;
@@ -61,12 +69,16 @@ module.exports = async function handler(req, res) {
       res.status(400).json({ error: `퇴실 시각은 HH:MM 형식이어야 합니다: "${e.time}"` });
       return;
     }
-    if (!e.qr_image) {
-      res.status(400).json({ error: `${e.time}에 표시할 QR 이미지를 등록하세요.` });
+    if (e.qr_image && !IMAGE_RE.test(e.qr_image)) {
+      res.status(400).json({ error: `${e.time}의 QR은 이미지 파일이어야 합니다.` });
       return;
     }
-    if (!IMAGE_RE.test(e.qr_image)) {
-      res.status(400).json({ error: `${e.time}의 QR은 이미지 파일이어야 합니다.` });
+    if (!e.qr_image && !baseImage) {
+      res.status(400).json({ error: "기본 QR 이미지를 먼저 등록하세요." });
+      return;
+    }
+    if (e.message.length > 200) {
+      res.status(400).json({ error: `${e.time}의 안내 문구가 너무 깁니다 (200자 이내).` });
       return;
     }
     if (e.after_close_url && !URL_RE.test(e.after_close_url)) {
@@ -85,7 +97,7 @@ module.exports = async function handler(req, res) {
   entries.sort((a, b) => a.time.localeCompare(b.time));
 
   // Vercel Serverless Function 요청 본문 한도(4.5MB)를 넘지 않도록 여유를 두고 제한
-  const totalBytes = entries.reduce((n, e) => n + e.qr_image.length, 0);
+  const totalBytes = baseImage.length + entries.reduce((n, e) => n + e.qr_image.length, 0);
   if (totalBytes > 3_500_000) {
     res.status(400).json({
       error: "등록한 이미지 용량 합계가 너무 큽니다. 더 작은 이미지(스크린샷 크롭 등)를 사용하세요.",
@@ -114,10 +126,12 @@ module.exports = async function handler(req, res) {
   // 이때 가장 이른 시각을 주면 점심 퇴실 같은 앞 항목이 대표가 되어, 정작 중요한
   // 마지막 퇴실을 놓친다. 그래서 마지막 시각을 기존 형식으로 남긴다.
   const legacy = entries[entries.length - 1];
+  const legacyImage = legacy.qr_image || baseImage;
   const content = JSON.stringify(
     {
       schedule: entries,
-      qr_image: legacy.qr_image,
+      base_qr_image: baseImage,
+      qr_image: legacyImage,  // 구버전 학생이 읽는 칸: 실제로 그 시각에 뜨는 이미지
       checkout_time: legacy.time,
       checkout_times: entries.map((e) => e.time),
       active_days: days,

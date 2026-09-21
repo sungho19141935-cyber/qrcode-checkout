@@ -113,6 +113,22 @@
   }
   .entry .hint { font-size: 0.75rem; color: var(--muted); margin: 6px 0 0; }
 
+  /* 기본 QR */
+  #baseRow { display: flex; gap: 16px; align-items: center; }
+  #baseDrop { width: 110px; height: 110px; flex: none; }
+  #baseInfo { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  #baseInfo b { color: var(--text); }
+
+  /* 항목별 이미지 상태 */
+  .imgstate { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .imgstate .tag {
+    font-size: 0.74rem; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: var(--bg); color: var(--muted); border: 1px solid var(--border);
+  }
+  .imgstate .tag.custom { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  @media (prefers-color-scheme: dark) { .imgstate .tag.custom { color: #7ee2a0; } }
+  .entry .drop { width: 72px; height: 72px; }
+
   #addBtn { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
   #addBtn:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -187,6 +203,21 @@
 
   <!-- 편집 화면 -->
   <main id="editor" hidden>
+    <div class="panel">
+      <h2>기본 QR</h2>
+      <div id="baseRow">
+        <div class="drop" id="baseDrop">
+          <span>클릭 · 드래그<br>또는 붙여넣기</span>
+          <input type="file" accept="image/*" hidden />
+        </div>
+        <div id="baseInfo">
+          한 번 등록하면 <b>계속 유지</b>됩니다.<br>
+          모든 퇴실 시각에 이 QR이 표시되고,<br>
+          특정 시각만 다르게 하려면 아래에서 지정하세요.
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <h2>퇴실 일정 <span id="statusBadge" class="status">적용 중</span></h2>
       <div id="entries"></div>
@@ -274,13 +305,15 @@
       return data.schedule.map((e) => ({
         time: e.time || "",
         qr_image: e.qr_image || "",
+        message: e.message || "",
         after_close_url: e.after_close_url || "",
       }));
     }
     const times = ((data && data.checkout_times) || [data && data.checkout_time]).filter(Boolean);
     return times.map((t) => ({
       time: t,
-      qr_image: (data && data.qr_image) || "",
+      qr_image: "",          // 구 형식은 모든 시각이 기본 QR을 쓰던 구조였다
+      message: "",
       after_close_url: (data && data.after_close_url) || "",
     }));
   }
@@ -313,32 +346,50 @@
     const el = document.createElement("div");
     el.className = "entry";
     el.innerHTML =
-      '<div class="drop"><span>QR 이미지<br>클릭 · 드래그<br>또는 붙여넣기</span>' +
+      '<div class="drop"><span>다른 QR<br>지정</span>' +
       '<input type="file" accept="image/*" hidden /></div>' +
       '<div class="entry-fields">' +
         '<div class="entry-top"><input type="time" /><button class="link remove">삭제</button></div>' +
+        '<input type="text" class="msg-input" placeholder="화면에 함께 띄울 안내 문구 (선택)" />' +
+        '<div style="height:8px"></div>' +
         '<input type="text" class="link-input" placeholder="닫을 때 열릴 링크 (선택)" />' +
-        '<p class="hint"></p>' +
+        '<div class="imgstate"><span class="tag">기본 QR 사용</span>' +
+        '<button class="link revert" hidden>기본 QR로</button></div>' +
       '</div>';
 
     const drop = el.querySelector(".drop");
     const file = el.querySelector("input[type=file]");
     const time = el.querySelector("input[type=time]");
     const link = el.querySelector(".link-input");
+    const msg = el.querySelector(".msg-input");
+    const tag = el.querySelector(".tag");
+    const revert = el.querySelector(".revert");
 
-    el.qrImage = d.qr_image || "";
+    el.qrImage = d.qr_image || "";   // 비어 있으면 기본 QR을 쓴다는 뜻
     time.value = d.time || "";
     link.value = d.after_close_url || "";
+    msg.value = d.message || "";
 
     function paint() {
-      if (el.qrImage) {
-        drop.innerHTML = "";
+      const shown = el.qrImage || baseImage;
+      drop.innerHTML = "";
+      if (shown) {
         const img = document.createElement("img");
-        img.src = el.qrImage;
+        img.src = shown;
         drop.appendChild(img);
+        drop.style.opacity = el.qrImage ? "1" : "0.5";   // 물려받은 것은 흐리게
+      } else {
+        const span = document.createElement("span");
+        span.innerHTML = "다른 QR<br>지정";
+        drop.appendChild(span);
       }
+      drop.appendChild(file);
+      tag.textContent = el.qrImage ? "이 시각 전용 QR" : "기본 QR 사용";
+      tag.className = "tag" + (el.qrImage ? " custom" : "");
+      revert.hidden = !el.qrImage;
       el.classList.toggle("invalid", !!time.value && !TIME_RE.test(time.value));
     }
+    el.repaint = paint;
 
     async function useFile(f) {
       if (!f || !/^image\//.test(f.type)) return;
@@ -361,8 +412,15 @@
     el.addEventListener("focusin", () => { pasteTarget = el; });
     el.pasteFile = useFile;
 
+    revert.addEventListener("click", () => {
+      el.qrImage = "";
+      paint();
+      refreshDirty();
+      toast("기본 QR을 쓰도록 되돌렸습니다");
+    });
     time.addEventListener("input", () => { paint(); refreshDirty(); });
     link.addEventListener("input", refreshDirty);
+    msg.addEventListener("input", refreshDirty);
     el.querySelector(".remove").addEventListener("click", () => {
       el.remove();
       if (!$("entries").children.length) addEntry();
@@ -374,12 +432,53 @@
     return el;
   }
 
+  // ---- 기본 QR ----
+  let baseImage = "";
+
+  function paintBase() {
+    const drop = $("baseDrop");
+    const file = drop.querySelector("input[type=file]");
+    drop.innerHTML = "";
+    if (baseImage) {
+      const img = document.createElement("img");
+      img.src = baseImage;
+      drop.appendChild(img);
+    } else {
+      const span = document.createElement("span");
+      span.innerHTML = "클릭 · 드래그<br>또는 붙여넣기";
+      drop.appendChild(span);
+    }
+    drop.appendChild(file);
+    Array.from($("entries").children).forEach((el) => el.repaint && el.repaint());
+  }
+
   let pasteTarget = null;
+
+  (function setupBase() {
+    const drop = $("baseDrop");
+    const file = drop.querySelector("input[type=file]");
+    async function use(f) {
+      if (!f || f.type.indexOf("image/") !== 0) return;
+      baseImage = await readFileAsDataUrl(f);   // 새로 올리면 그대로 덮어쓴다
+      paintBase();
+      refreshDirty();
+      toast("기본 QR을 바꿨습니다");
+    }
+    drop.addEventListener("click", () => file.click());
+    file.addEventListener("change", () => use(file.files[0]));
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault(); drop.classList.remove("over"); use(e.dataTransfer.files[0]);
+    });
+    drop.pasteFile = use;
+  })();
   document.addEventListener("paste", (e) => {
     const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"));
     if (!item) return;
-    const target = pasteTarget || $("entries").lastElementChild;
-    if (target) target.pasteFile(item.getAsFile());
+    // 카드를 건드린 적이 없으면 기본 QR 자리에 넣는다
+    const target = pasteTarget || $("baseDrop");
+    if (target && target.pasteFile) target.pasteFile(item.getAsFile());
   });
 
   function renderEntries(list) {
@@ -391,17 +490,21 @@
     return Array.from($("entries").children).map((el) => ({
       time: el.querySelector("input[type=time]").value.trim(),
       qr_image: el.qrImage || "",
+      message: el.querySelector(".msg-input").value.trim(),
       after_close_url: el.querySelector(".link-input").value.trim(),
     }));
   }
 
   // ---------- 변경 감지 ----------
-  function sign(entries, days) {
+  function sign(entries, days, base) {
     return JSON.stringify([
-      entries.map((e) => [e.time, (e.qr_image || "").slice(0, 80), e.after_close_url]),
+      entries.map((e) => [e.time, (e.qr_image || "").slice(0, 80), e.message || "", e.after_close_url]),
       days,
+      (base || "").slice(0, 80),
     ]);
   }
+
+  const liveBase = (d) => (d && (d.base_qr_image || d.qr_image)) || "";
 
   function describeChanges(now, before) {
     const parts = [];
@@ -417,6 +520,7 @@
     });
     if (changedImg.length) parts.push("QR 변경 " + changedImg.map((e) => e.time).join(", "));
     if (getDays().join(",") !== (live.active_days || []).join(",")) parts.push("요일 변경");
+    if ((baseImage || "").slice(0, 80) !== liveBase(live).slice(0, 80)) parts.push("기본 QR 변경");
     return parts.length ? parts.join(" · ") : "수정한 내용";
   }
 
@@ -424,7 +528,8 @@
     if (!live) return;
     const now = collect();
     const before = toEntries(live);
-    const dirty = sign(now, getDays()) !== sign(before, live.active_days || []);
+    const dirty =
+      sign(now, getDays(), baseImage) !== sign(before, live.active_days || [], liveBase(live));
     $("statusBadge").className = "status" + (dirty ? " dirty" : "");
     $("statusBadge").textContent = dirty ? "저장 안 됨" : "적용 중";
     // 버튼은 항상 같은 자리에 두고, 바꾼 게 없을 때만 비활성으로 알린다
@@ -452,6 +557,8 @@
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "불러오기 실패");
     live = data;
+    baseImage = liveBase(data);
+    paintBase();
     renderEntries(toEntries(data));
     renderDays(data.active_days);
     refreshDirty();
@@ -493,6 +600,8 @@
 
   $("addBtn").addEventListener("click", () => { addEntry(); refreshDirty(); });
   $("resetBtn").addEventListener("click", () => {
+    baseImage = liveBase(live);
+    paintBase();
     renderEntries(toEntries(live));
     renderDays(live.active_days);
     refreshDirty();
@@ -503,7 +612,8 @@
     const schedule = collect();
     for (const e of schedule) {
       if (!TIME_RE.test(e.time)) { toast("시각을 모두 입력하세요", true); return; }
-      if (!e.qr_image) { toast(e.time + " 의 QR 이미지를 넣어주세요", true); return; }
+      if (!e.qr_image && !baseImage) { toast("기본 QR 이미지를 먼저 등록하세요", true); return; }
+      if (e.message.length > 200) { toast(e.time + " 의 안내 문구가 너무 깁니다", true); return; }
       if (e.after_close_url && !/^https?:\/\//.test(e.after_close_url)) {
         toast(e.time + " 의 링크는 http(s)로 시작해야 합니다", true); return;
       }
@@ -515,7 +625,7 @@
 
     $("saveBtn").disabled = true;
     try {
-      await api("/api/update", { password, schedule, active_days: getDays() });
+      await api("/api/update", { password, schedule, qr_image: baseImage, active_days: getDays() });
       await loadLive();
       toast("저장했습니다 · 학생 PC에 1분 내 반영");
     } catch (e) {
@@ -559,6 +669,8 @@
   $("presetSelect").addEventListener("change", () => {
     const p = presetsCache[$("presetSelect").value];
     if (!p) return;
+    baseImage = liveBase(p) || baseImage;
+    paintBase();
     renderEntries(toEntries(p));
     renderDays(p.active_days);
     refreshDirty();
@@ -569,12 +681,14 @@
     const name = $("presetName").value.trim();
     if (!name) { setMsg($("presetMsg"), "이름을 입력하세요.", "error"); return; }
     const schedule = collect();
-    if (schedule.some((e) => !e.time || !e.qr_image)) {
-      setMsg($("presetMsg"), "시각과 QR 이미지를 먼저 채워주세요.", "error");
+    if (!schedule.length || schedule.some((e) => !e.time) || !baseImage) {
+      setMsg($("presetMsg"), "시각과 기본 QR을 먼저 채워주세요.", "error");
       return;
     }
     try {
-      await api("/api/presets", { password, action: "save", name, schedule, active_days: getDays() });
+      await api("/api/presets", {
+        password, action: "save", name, schedule, qr_image: baseImage, active_days: getDays(),
+      });
       $("presetName").value = "";
       setMsg($("presetMsg"), "");
       await refreshPresets();
