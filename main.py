@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -116,19 +116,29 @@ def decode_qr_image(qr_image_b64: str):
 
 
 def get_display_image(state: dict):
-    """관리자가 업로드한 QR 이미지가 있으면 그대로, 없으면 checkout_url로 QR을 생성해서 반환."""
+    """표시할 이미지를 만든다. 공지 항목에 이미지가 없으면 None (문구만 띄운다).
+
+    공지는 퇴실 QR과 무관한 안내이므로, 이미지를 안 붙였다고 퇴실 QR을 대신
+    띄우면 학생이 엉뚱한 QR을 찍게 된다. 그래서 공지는 물려받지 않는다.
+    """
     qr_image_b64 = state.get("qr_image")
     if qr_image_b64:
         try:
             return decode_qr_image(qr_image_b64)
         except (ValueError, binascii.Error, OSError) as e:
-            log(f"[QRcode] 저장된 QR 이미지를 열지 못했습니다: {e}")
+            log(f"[QRcode] 저장된 이미지를 열지 못했습니다: {e}")
+
+    if state.get("kind") == "notice":
+        return None
+
     return make_qr_image(state.get("checkout_url", ""))
 
 
 def show_qr_window(state: dict, title: str, display_seconds: int):
     img = get_display_image(state)
-    img.thumbnail((700, 700))
+    if img is not None:
+        img.thumbnail((700, 700))
+    message = (state.get("message") or "").strip()
 
     root = tk.Tk()
     root.title(title)
@@ -136,34 +146,42 @@ def show_qr_window(state: dict, title: str, display_seconds: int):
     root.attributes("-fullscreen", True)
     root.configure(bg="white")
 
-    photo = ImageTk.PhotoImage(img)
-
     label_title = tk.Label(root, text=title, font=("Malgun Gothic", 24, "bold"), bg="white")
-    label_title.pack(pady=(40, 6))
+    label_title.pack(pady=(40, 10))
 
-    # 관리자가 이 시각에만 따로 적어둔 안내 문구 (없으면 표시하지 않는다)
-    message = (state.get("message") or "").strip()
-    if message:
+    photo = None
+    if img is not None:
+        photo = ImageTk.PhotoImage(img)
+        tk.Label(root, image=photo, bg="white").pack(expand=True)
+        # 문구는 이미지를 가리지 않도록 아래에 둔다
+        if message:
+            tk.Label(
+                root,
+                text=message,
+                font=("Malgun Gothic", 18),
+                bg="white",
+                fg="#1f2328",
+                wraplength=1000,
+                justify="center",
+            ).pack(pady=(4, 0))
+    else:
+        # 이미지 없는 공지: 문구만 화면 가운데에 크게
         tk.Label(
             root,
             text=message,
-            font=("Malgun Gothic", 17),
+            font=("Malgun Gothic", 34, "bold"),
             bg="white",
-            fg="#9a6700",
-            wraplength=900,
+            fg="#1f2328",
+            wraplength=1100,
             justify="center",
-        ).pack(pady=(0, 10))
+        ).pack(expand=True)
 
-    label_img = tk.Label(root, image=photo, bg="white")
-    label_img.pack(expand=True)
-
-    label_hint = tk.Label(
-        root,
-        text="QR 스캔 후 아무 키나 누르거나 화면을 클릭하면 닫힙니다.",
-        font=("Malgun Gothic", 14),
-        bg="white",
-        fg="gray",
+    hint = (
+        "QR 스캔 후 아무 키나 누르거나 화면을 클릭하면 닫힙니다."
+        if img is not None
+        else "아무 키나 누르거나 화면을 클릭하면 닫힙니다."
     )
+    label_hint = tk.Label(root, text=hint, font=("Malgun Gothic", 14), bg="white", fg="gray")
     label_hint.pack(pady=(10, 40))
 
     def close(_event=None):
@@ -224,16 +242,15 @@ def schedule_of(state: dict) -> list:
     같은 모양으로 변환해 돌려준다. 항목에 이미지가 없으면 공용 이미지를 물려받는다.
     """
     def entry(time_text, source):
+        kind = "notice" if source.get("kind") == "notice" else "checkout"
+        own_image = source.get("qr_image")
+        # 퇴실 항목만 기본 QR을 물려받는다. base_qr_image는 기본 QR 전용 칸이고,
+        # qr_image는 구버전 호환용이라 마지막 항목의 이미지가 들어갈 수 있어 뒤에 둔다.
+        inherited = state.get("base_qr_image") or state.get("qr_image")
         return {
             "time": time_text,
-            # 항목에 이미지가 없으면 기본 QR을 그대로 쓴다 (관리자가 매번 안 붙여도 되도록).
-            # base_qr_image는 기본 QR 전용 칸이고, qr_image는 구버전 호환용이라
-            # 마지막 항목의 이미지가 들어갈 수 있어 기본값으로는 뒤에 둔다.
-            "qr_image": (
-                source.get("qr_image")
-                or state.get("base_qr_image")
-                or state.get("qr_image")
-            ),
+            "kind": kind,
+            "qr_image": own_image or (None if kind == "notice" else inherited),
             "message": source.get("message") or "",
             "checkout_url": source.get("checkout_url") or state.get("checkout_url", ""),
             "after_close_url": (
@@ -543,7 +560,8 @@ def run_scheduler(config):
                 # 오늘치를 쓴 것으로 처리한다 (창이 연달아 여러 개 뜨지 않도록).
                 done_today.update(t for t in times if parse_hhmm(t) <= parse_hhmm(target))
                 entry = next(e for e in entries if e["time"] == target)
-                log(f"[QRcode] {now_hm} (설정 {target}) - QR 화면 표시")
+                label = "공지" if entry.get("kind") == "notice" else "QR"
+                log(f"[QRcode] {now_hm} (설정 {target}) - {label} 화면 표시")
                 # 그 시각에 등록된 QR/링크로 띄운다 (시각마다 다를 수 있다)
                 show_qr_window(entry, window_title, display_seconds)
 
@@ -599,6 +617,18 @@ def main():
         assert _msg[0]["message"] == "특강" and _msg[0]["qr_image"] == "공용", "문구/상속 조합 오류"
         _base = schedule_of({"schedule": [{"time": "09:00"}], "base_qr_image": "기본", "qr_image": "구버전"})
         assert _base[0]["qr_image"] == "기본", "기본 QR 우선순위 오류"
+        _notice = schedule_of({
+            "schedule": [{"time": "20:00", "kind": "notice", "message": "공지"}],
+            "base_qr_image": "기본",
+        })
+        assert _notice[0]["qr_image"] is None, "공지가 기본 QR을 물려받으면 안 됨"
+        assert get_display_image(_notice[0]) is None, "문구 전용 공지는 이미지가 없어야 함"
+        _notice_img = schedule_of({
+            "schedule": [{"time": "20:00", "kind": "notice", "qr_image": "직접"}],
+            "base_qr_image": "기본",
+        })
+        assert _notice_img[0]["qr_image"] == "직접", "공지 전용 이미지 오류"
+        assert get_display_image({"checkout_url": "https://example.com"}) is not None, "퇴실 폴백 오류"
         _legacy = schedule_of({"checkout_times": ["09:00", "18:00"], "qr_image": "공용"})
         assert len(_legacy) == 2 and _legacy[1]["qr_image"] == "공용", "구 형식 호환 오류"
         make_qr_image("https://example.com/selftest")  # 이미지 생성 경로

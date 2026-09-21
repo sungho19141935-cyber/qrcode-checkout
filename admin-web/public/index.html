@@ -119,6 +119,15 @@
   #baseInfo { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
   #baseInfo b { color: var(--text); }
 
+  /* 종류 전환 */
+  .kind { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .kind button {
+    background: transparent; color: var(--muted); border: none; border-radius: 0;
+    padding: 6px 14px; font-size: 0.8rem; font-weight: 700; margin: 0;
+  }
+  .kind button.on { background: var(--accent); color: #fff; }
+  .entry.notice { border-left: 3px solid var(--warn); }
+
   /* 항목별 이미지 상태 */
   .imgstate { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .imgstate .tag {
@@ -212,8 +221,9 @@
         </div>
         <div id="baseInfo">
           한 번 등록하면 <b>계속 유지</b>됩니다.<br>
-          모든 퇴실 시각에 이 QR이 표시되고,<br>
-          특정 시각만 다르게 하려면 아래에서 지정하세요.
+          모든 <b>퇴실</b> 시각에 이 QR이 표시됩니다.<br>
+          특정 시각만 다르게 하려면 아래에서 지정하고,<br>
+          QR과 무관한 안내는 <b>공지</b>로 추가하세요.
         </div>
       </div>
     </div>
@@ -304,6 +314,7 @@
     if (data && Array.isArray(data.schedule) && data.schedule.length) {
       return data.schedule.map((e) => ({
         time: e.time || "",
+        kind: e.kind === "notice" ? "notice" : "checkout",
         qr_image: e.qr_image || "",
         message: e.message || "",
         after_close_url: e.after_close_url || "",
@@ -312,6 +323,7 @@
     const times = ((data && data.checkout_times) || [data && data.checkout_time]).filter(Boolean);
     return times.map((t) => ({
       time: t,
+      kind: "checkout",
       qr_image: "",          // 구 형식은 모든 시각이 기본 QR을 쓰던 구조였다
       message: "",
       after_close_url: (data && data.after_close_url) || "",
@@ -349,7 +361,10 @@
       '<div class="drop"><span>다른 QR<br>지정</span>' +
       '<input type="file" accept="image/*" hidden /></div>' +
       '<div class="entry-fields">' +
-        '<div class="entry-top"><input type="time" /><button class="link remove">삭제</button></div>' +
+        '<div class="entry-top"><input type="time" />' +
+        '<span class="kind"><button type="button" data-kind="checkout">퇴실</button>' +
+        '<button type="button" data-kind="notice">공지</button></span>' +
+        '<button class="link remove">삭제</button></div>' +
         '<input type="text" class="msg-input" placeholder="화면에 함께 띄울 안내 문구 (선택)" />' +
         '<div style="height:8px"></div>' +
         '<input type="text" class="link-input" placeholder="닫을 때 열릴 링크 (선택)" />' +
@@ -365,13 +380,16 @@
     const tag = el.querySelector(".tag");
     const revert = el.querySelector(".revert");
 
-    el.qrImage = d.qr_image || "";   // 비어 있으면 기본 QR을 쓴다는 뜻
+    el.qrImage = d.qr_image || "";   // 퇴실이면서 비어 있으면 기본 QR을 쓴다는 뜻
+    el.kind = d.kind === "notice" ? "notice" : "checkout";
     time.value = d.time || "";
     link.value = d.after_close_url || "";
     msg.value = d.message || "";
 
     function paint() {
-      const shown = el.qrImage || baseImage;
+      const isNotice = el.kind === "notice";
+      // 공지는 기본 QR을 물려받지 않는다 (엉뚱한 QR을 찍게 되므로)
+      const shown = el.qrImage || (isNotice ? "" : baseImage);
       drop.innerHTML = "";
       if (shown) {
         const img = document.createElement("img");
@@ -380,13 +398,26 @@
         drop.style.opacity = el.qrImage ? "1" : "0.5";   // 물려받은 것은 흐리게
       } else {
         const span = document.createElement("span");
-        span.innerHTML = "다른 QR<br>지정";
+        span.innerHTML = isNotice ? "이미지<br>(선택)" : "다른 QR<br>지정";
         drop.appendChild(span);
+        drop.style.opacity = "1";
       }
       drop.appendChild(file);
-      tag.textContent = el.qrImage ? "이 시각 전용 QR" : "기본 QR 사용";
+
+      el.classList.toggle("notice", isNotice);
+      el.querySelectorAll(".kind button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.kind === el.kind);
+      });
+      msg.placeholder = isNotice
+        ? "안내 문구 (이미지 없으면 이 문구만 크게 표시)"
+        : "화면에 함께 띄울 안내 문구 (선택)";
+
+      tag.textContent = isNotice
+        ? (el.qrImage ? "공지 이미지 + 문구" : "문구만 표시")
+        : (el.qrImage ? "이 시각 전용 QR" : "기본 QR 사용");
       tag.className = "tag" + (el.qrImage ? " custom" : "");
       revert.hidden = !el.qrImage;
+      revert.textContent = isNotice ? "이미지 빼기" : "기본 QR로";
       el.classList.toggle("invalid", !!time.value && !TIME_RE.test(time.value));
     }
     el.repaint = paint;
@@ -416,7 +447,14 @@
       el.qrImage = "";
       paint();
       refreshDirty();
-      toast("기본 QR을 쓰도록 되돌렸습니다");
+      toast(el.kind === "notice" ? "이미지를 뺐습니다" : "기본 QR을 쓰도록 되돌렸습니다");
+    });
+    el.querySelectorAll(".kind button").forEach((b) => {
+      b.addEventListener("click", () => {
+        el.kind = b.dataset.kind;
+        paint();
+        refreshDirty();
+      });
     });
     time.addEventListener("input", () => { paint(); refreshDirty(); });
     link.addEventListener("input", refreshDirty);
@@ -490,6 +528,7 @@
     return Array.from($("entries").children).map((el) => ({
       time: el.querySelector("input[type=time]").value.trim(),
       qr_image: el.qrImage || "",
+      kind: el.kind,
       message: el.querySelector(".msg-input").value.trim(),
       after_close_url: el.querySelector(".link-input").value.trim(),
     }));
@@ -498,7 +537,9 @@
   // ---------- 변경 감지 ----------
   function sign(entries, days, base) {
     return JSON.stringify([
-      entries.map((e) => [e.time, (e.qr_image || "").slice(0, 80), e.message || "", e.after_close_url]),
+      entries.map((e) => [
+        e.time, e.kind || "checkout", (e.qr_image || "").slice(0, 80), e.message || "", e.after_close_url,
+      ]),
       days,
       (base || "").slice(0, 80),
     ]);
@@ -612,7 +653,13 @@
     const schedule = collect();
     for (const e of schedule) {
       if (!TIME_RE.test(e.time)) { toast("시각을 모두 입력하세요", true); return; }
-      if (!e.qr_image && !baseImage) { toast("기본 QR 이미지를 먼저 등록하세요", true); return; }
+      if (e.kind === "notice") {
+        if (!e.qr_image && !e.message) {
+          toast(e.time + " 공지에 이미지나 문구를 넣어주세요", true); return;
+        }
+      } else if (!e.qr_image && !baseImage) {
+        toast("기본 QR 이미지를 먼저 등록하세요", true); return;
+      }
       if (e.message.length > 200) { toast(e.time + " 의 안내 문구가 너무 깁니다", true); return; }
       if (e.after_close_url && !/^https?:\/\//.test(e.after_close_url)) {
         toast(e.time + " 의 링크는 http(s)로 시작해야 합니다", true); return;

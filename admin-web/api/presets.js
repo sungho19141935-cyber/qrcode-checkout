@@ -111,6 +111,7 @@ module.exports = async function handler(req, res) {
       const entries = Array.isArray(schedule) && schedule.length
         ? schedule.map((e) => ({
             time: String((e && e.time) || "").trim(),
+            kind: e && e.kind === "notice" ? "notice" : "checkout",
             qr_image: (e && e.qr_image) || "",
             message: String((e && e.message) || "").trim(),
             after_close_url: String((e && e.after_close_url) || "").trim(),
@@ -128,7 +129,8 @@ module.exports = async function handler(req, res) {
             }));
 
       const base = qr_image || "";
-      if (!name || !entries.length || entries.some((e) => !e.time) || !(base || entries.every((e) => e.qr_image))) {
+      const needsBase = entries.some((e) => e.kind !== "notice" && !e.qr_image);
+      if (!name || !entries.length || entries.some((e) => !e.time) || (needsBase && !base)) {
         res.status(400).json({ error: "설정 이름, 시각, QR 이미지는 필수입니다." });
         return;
       }

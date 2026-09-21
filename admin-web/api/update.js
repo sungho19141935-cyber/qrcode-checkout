@@ -35,7 +35,8 @@ module.exports = async function handler(req, res) {
   if (Array.isArray(schedule) && schedule.length) {
     entries = schedule.map((e) => ({
       time: String((e && e.time) || "").trim(),
-      // 항목별 이미지는 선택 사항이다. 비워두면 기본 QR(qr_image)을 쓴다.
+      // 퇴실은 이미지를 비워두면 기본 QR을 쓰고, 공지는 물려받지 않는다.
+      kind: e && e.kind === "notice" ? "notice" : "checkout",
       qr_image: (e && e.qr_image) || "",
       message: String((e && e.message) || "").trim(),
       after_close_url: String((e && e.after_close_url) || "").trim(),
@@ -73,7 +74,13 @@ module.exports = async function handler(req, res) {
       res.status(400).json({ error: `${e.time}의 QR은 이미지 파일이어야 합니다.` });
       return;
     }
-    if (!e.qr_image && !baseImage) {
+    if (e.kind === "notice") {
+      // 공지는 이미지든 문구든 최소 하나는 있어야 빈 화면이 뜨지 않는다
+      if (!e.qr_image && !e.message) {
+        res.status(400).json({ error: `${e.time} 공지에 이미지나 안내 문구를 넣으세요.` });
+        return;
+      }
+    } else if (!e.qr_image && !baseImage) {
       res.status(400).json({ error: "기본 QR 이미지를 먼저 등록하세요." });
       return;
     }
@@ -125,7 +132,12 @@ module.exports = async function handler(req, res) {
   // 구버전 학생 프로그램(자동 업데이트 전)은 schedule을 모르고 시각 하나만 읽는다.
   // 이때 가장 이른 시각을 주면 점심 퇴실 같은 앞 항목이 대표가 되어, 정작 중요한
   // 마지막 퇴실을 놓친다. 그래서 마지막 시각을 기존 형식으로 남긴다.
-  const legacy = entries[entries.length - 1];
+  // 구버전 클라이언트는 시각 하나만 읽는다. 공지를 대표로 주면 퇴실을 놓치므로
+  // 퇴실 항목 중 마지막 것을 고른다 (퇴실이 하나도 없으면 어쩔 수 없이 마지막 항목).
+  const checkouts = entries.filter((e) => e.kind !== "notice");
+  const legacy = (checkouts.length ? checkouts : entries)[
+    (checkouts.length ? checkouts : entries).length - 1
+  ];
   const legacyImage = legacy.qr_image || baseImage;
   const content = JSON.stringify(
     {
@@ -133,7 +145,7 @@ module.exports = async function handler(req, res) {
       base_qr_image: baseImage,
       qr_image: legacyImage,  // 구버전 학생이 읽는 칸: 실제로 그 시각에 뜨는 이미지
       checkout_time: legacy.time,
-      checkout_times: entries.map((e) => e.time),
+      checkout_times: (checkouts.length ? checkouts : entries).map((e) => e.time),
       active_days: days,
       after_close_url: legacy.after_close_url,
     },
