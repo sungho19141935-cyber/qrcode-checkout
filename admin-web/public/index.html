@@ -158,15 +158,6 @@
   .sumrow img { width: 34px; height: 34px; object-fit: contain; background: #fff; border-radius: 4px; }
   .sub-muted { color: var(--muted); font-size: 1rem; }
   #editBtn { margin-top: 20px; }
-  .statrow {
-    display: flex; gap: 10px; align-items: baseline;
-    padding: 8px 0; border-top: 1px solid var(--border); font-size: 0.95rem;
-  }
-  .statrow:first-child { border-top: none; }
-  .statrow .pc { font-weight: 700; flex: 1; min-width: 0; word-break: break-all; }
-  .statrow .meta { color: var(--muted); font-size: 0.88rem; }
-  .statrow.stale .pc { color: var(--warn); }
-  .statsum { font-size: 0.92rem; color: var(--muted); margin-bottom: 10px; }
   .sectionhint { font-size: 1rem; color: var(--muted); margin: -6px 0 12px; }
   .empty { font-size: 1.05rem; color: var(--muted); text-align: center; padding: 14px 0; margin: 0; }
   .addrow { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
@@ -317,12 +308,6 @@
         <button class="ghost" id="resetBtn">취소</button>
       </div>
     </div>
-
-    <details class="panel" id="statusPanel">
-      <summary>설치 현황</summary>
-      <p class="sectionhint">각 PC가 하루 한 번 보내는 기록입니다. 펼치면 불러옵니다.</p>
-      <div id="statusBody">비밀번호 입력 후 펼치면 불러옵니다.</div>
-    </details>
 
     <details class="panel" id="presetsPanel">
       <summary>저장된 설정 (프리셋)</summary>
@@ -884,65 +869,6 @@
     } finally {
       $("saveBtn").disabled = false;
     }
-  });
-
-  // ---- 설치 현황 ----
-  function agoText(iso) {
-    const t = Date.parse(iso);
-    if (!t) return "기록 없음";
-    const mins = Math.floor((Date.now() - t) / 60000);
-    if (mins < 60) return mins + "분 전";
-    if (mins < 60 * 24) return Math.floor(mins / 60) + "시간 전";
-    return Math.floor(mins / 1440) + "일 전";
-  }
-
-  async function refreshStatus() {
-    const box = $("statusBody");
-    box.textContent = "불러오는 중...";
-    try {
-      const data = await api("/api/status", { password });
-      const records = data.records || {};
-      const names = Object.keys(records).sort((a, b) =>
-        String(records[b].last_seen).localeCompare(String(records[a].last_seen))
-      );
-      box.innerHTML = "";
-      if (!names.length) {
-        box.textContent = "아직 보고된 PC가 없습니다. (프로그램이 하루 한 번 보냅니다)";
-        return;
-      }
-
-      const DAY = 24 * 60 * 60 * 1000;
-      const stale = names.filter((n) => Date.now() - Date.parse(records[n].last_seen) > 3 * DAY);
-      const sum = document.createElement("div");
-      sum.className = "statsum";
-      sum.textContent =
-        names.length + "대 확인됨" + (stale.length ? ` · 3일 넘게 조용한 PC ${stale.length}대` : "");
-      box.appendChild(sum);
-
-      names.forEach((name) => {
-        const rec = records[name];
-        const row = document.createElement("div");
-        row.className = "statrow" + (stale.includes(name) ? " stale" : "");
-        const pc = document.createElement("span");
-        pc.className = "pc";
-        pc.textContent = name;
-        const meta = document.createElement("span");
-        meta.className = "meta";
-        meta.textContent =
-          agoText(rec.last_seen) +
-          " · v" + (rec.version || "?") +
-          (rec.last_shown ? " · 마지막 표시 " + rec.last_shown : " · 표시 기록 없음");
-        row.appendChild(pc);
-        row.appendChild(meta);
-        box.appendChild(row);
-      });
-    } catch (e) {
-      box.textContent = "불러오지 못했습니다: " + e.message;
-    }
-  }
-
-  $("statusPanel").addEventListener("toggle", () => {
-    if ($("statusPanel").open) refreshStatus();
   });
 
   // ---------- 프리셋 ----------

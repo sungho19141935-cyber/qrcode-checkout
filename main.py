@@ -5,7 +5,6 @@ import hashlib
 import io
 import json
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -27,13 +26,11 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
 DEFAULT_UPDATE_INTERVAL = 3600  # 1시간마다 확인
-DEFAULT_STATUS_URL = "https://qrcode-checkout.vercel.app/api/heartbeat"
-DEFAULT_STATUS_INTERVAL = 86400  # 하루 한 번만 보고한다
 MIN_MAIN_PY_BYTES = 5_000  # 이보다 작으면 잘린 응답으로 간주
 
 DEFAULT_CHECKOUT_TIME = "18:00"
@@ -303,37 +300,6 @@ def should_trigger(now: datetime, checkout_time: str, catchup_minutes: int) -> b
     return 0 <= current - target <= catchup_minutes
 
 
-def post_status(status_url: str, payload: dict, timeout: int = 10) -> bool:
-    """관리자가 설치 현황을 볼 수 있도록 상태를 보고한다.
-
-    보내는 것은 PC 이름, 프로그램 버전, 마지막으로 QR을 띄운 날짜뿐이다.
-    실패해도 프로그램 동작에는 영향이 없다.
-    """
-    try:
-        body = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            status_url,
-            data=body,
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status == 200
-    except Exception as e:  # 보고는 부가 기능이므로 어떤 실패든 넘어간다
-        log(f"[QRcode] 상태 보고 실패 (무시): {e}")
-        return False
-
-
-def build_status(state: dict, version: str) -> dict:
-    return {
-        "app": "qrcode-checkout",
-        "pc": socket.gethostname()[:64],
-        "version": version,
-        "last_shown": (state.get("last_shown") or "")[:32],
-        "times": ", ".join(e["time"] for e in schedule_of(state))[:120],
-    }
-
-
 def fetch_json(url: str, timeout: int = 10):
     sep = "&" if "?" in url else "?"
     req = urllib.request.Request(
@@ -500,8 +466,6 @@ def run_scheduler(config):
     catchup_minutes = int(config.get("catchup_minutes", DEFAULT_CATCHUP_MINUTES))
     update_url = config.get("update_url", DEFAULT_UPDATE_URL)
     update_interval = int(config.get("update_check_seconds", DEFAULT_UPDATE_INTERVAL))
-    status_url = config.get("status_url", DEFAULT_STATUS_URL)
-    status_interval = int(config.get("status_interval_seconds", DEFAULT_STATUS_INTERVAL))
 
     state = load_cache()
     state.setdefault("checkout_url", config.get("checkout_url", ""))
@@ -529,12 +493,6 @@ def run_scheduler(config):
 
     while True:
         now_ts = time.time()
-
-        # 마지막 보고 시각은 cache.json에 남겨, 재시작할 때마다 보내지 않게 한다
-        if status_url and now_ts - float(state.get("last_status_ts") or 0) >= status_interval:
-            state["last_status_ts"] = now_ts
-            save_cache(state)
-            post_status(status_url, build_status(state, VERSION))
 
         # QR을 띄우는 중에 교체가 끼어들지 않도록, 표시 직전이 아닐 때만 확인한다
         if update_url and now_ts - last_update_check >= update_interval:
@@ -604,9 +562,6 @@ def run_scheduler(config):
                 entry = next(e for e in entries if e["time"] == target)
                 label = "공지" if entry.get("kind") == "notice" else "QR"
                 log(f"[QRcode] {now_hm} (설정 {target}) - {label} 화면 표시")
-                # 관리자 현황 화면에서 "이 PC가 실제로 QR을 봤는지"를 보기 위해 남긴다
-                state["last_shown"] = f"{today} {now_hm}"
-                save_cache(state)
                 # 그 시각에 등록된 QR/링크로 띄운다 (시각마다 다를 수 있다)
                 show_qr_window(entry, window_title, display_seconds)
 
@@ -674,9 +629,6 @@ def main():
         })
         assert _notice_img[0]["qr_image"] == "직접", "공지 전용 이미지 오류"
         assert get_display_image({"checkout_url": "https://example.com"}) is not None, "퇴실 폴백 오류"
-        _status = build_status({"schedule": [{"time": "18:00"}], "last_shown": "2026-01-01 18:00"}, VERSION)
-        assert _status["app"] == "qrcode-checkout" and _status["pc"], "상태 보고 구성 오류"
-        assert _status["times"] == "18:00" and _status["version"] == VERSION, "상태 보고 내용 오류"
         _legacy = schedule_of({"checkout_times": ["09:00", "18:00"], "qr_image": "공용"})
         assert len(_legacy) == 2 and _legacy[1]["qr_image"] == "공용", "구 형식 호환 오류"
         make_qr_image("https://example.com/selftest")  # 이미지 생성 경로
