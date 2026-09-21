@@ -240,6 +240,7 @@
       <p class="sectionhint">이 시각에 기본 QR이 표시됩니다.</p>
       <div id="checkoutList"></div>
       <button class="addrow" id="addCheckoutBtn">+ 퇴실 시각 추가</button>
+      <p id="migrateNote" class="hintline"></p>
       <p id="legacyNote" class="hintline"></p>
     </div>
 
@@ -485,6 +486,12 @@
       el.classList.add("timeonly");
       drop.remove();
       el.querySelector(".imgstate").remove();
+      // 예전 화면에서 이 시각에만 지정해둔 이미지가 있으면 놓아준다.
+      // 화면에 보이지도 않는 이미지가 계속 학생에게 뜨는 상황을 막는다.
+      if (el.qrImage) {
+        el.qrImage = "";
+        migrated.push(d.time || "새 항목");
+      }
     }
 
     paint();
@@ -544,7 +551,10 @@
     if (target && target.pasteFile) target.pasteFile(item.getAsFile());
   });
 
+  let migrated = [];
+
   function renderEntries(list) {
+    migrated = [];
     $("checkoutList").innerHTML = "";
     $("noticeList").innerHTML = "";
     const all = list || [];
@@ -553,6 +563,10 @@
     (checkouts.length ? checkouts : [{}]).forEach((e) => addEntry(e, "checkout"));
     notices.forEach((e) => addEntry(e, "notice"));
     updateNoticeEmpty();
+    $("migrateNote").textContent = migrated.length
+      ? migrated.join(", ") + " 에 따로 지정돼 있던 이미지가 있습니다. 저장하면 기본 QR로 통일됩니다. " +
+        "그 이미지를 계속 쓰시려면 아래 공지로 옮겨주세요."
+      : "";
   }
 
   function updateNoticeEmpty() {
