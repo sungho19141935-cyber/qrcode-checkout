@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -59,14 +59,15 @@ def log(message: str):
 
 
 def load_config():
-    with open(CONFIG_PATH, encoding="utf-8") as f:
+    # 편집기나 스크립트가 BOM을 붙여 저장해도 읽히도록 utf-8-sig로 연다
+    with open(CONFIG_PATH, encoding="utf-8-sig") as f:
         return json.load(f)
 
 
 def load_cache():
     if CACHE_PATH.exists():
         try:
-            with open(CACHE_PATH, encoding="utf-8") as f:
+            with open(CACHE_PATH, encoding="utf-8-sig") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
@@ -483,4 +484,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:
+        # pythonw.exe에는 콘솔이 없어, 여기서 기록하지 않으면 프로그램이 왜 사라졌는지
+        # 알 방법이 전혀 없다.
+        import traceback
+
+        log("[QRcode] 치명적 오류로 종료됩니다:\n" + traceback.format_exc())
+        raise
