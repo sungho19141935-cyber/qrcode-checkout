@@ -178,7 +178,8 @@
   #saveArea { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
   #saveArea button { flex: 0 0 auto; }
   #saveBtn { min-width: 120px; }
-  #saveSummary { font-size: 0.82rem; color: var(--muted); margin-top: 12px; min-height: 1.2em; }
+  .saverow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #saveSummary { font-size: 0.82rem; color: var(--muted); min-height: 1.2em; }
   .hintline { font-size: 0.78rem; color: var(--warn); margin: 12px 0 0; }
   .hintline:empty { display: none; }
   #saveSummary b { color: var(--warn); }
@@ -245,10 +246,6 @@
               <h3>퇴실 시각</h3>
               <div id="sumCheckouts">불러오는 중...</div>
             </div>
-            <div class="sumgroup" id="sumNoticeGroup">
-              <h3>공지</h3>
-              <div id="sumNotices"></div>
-            </div>
             <div class="sumgroup">
               <h3>실행 요일</h3>
               <div id="sumDays"></div>
@@ -272,8 +269,7 @@
         <div id="baseInfo">
           한 번 등록하면 <b>계속 유지</b>됩니다.<br>
           모든 <b>퇴실</b> 시각에 이 QR이 표시됩니다.<br>
-          특정 시각만 다르게 하려면 아래에서 지정하고,<br>
-          QR과 무관한 안내는 <b>공지</b>로 추가하세요.
+          QR과 무관한 안내는 아래 <b>공지</b>로 추가하세요.
         </div>
         <button class="ghost" id="baseEditBtn">수정하기</button>
         </div>
@@ -281,13 +277,19 @@
     </div>
 
     <div class="panel">
-      <h2>퇴실 시각 <span id="statusBadge" class="status">적용 중</span></h2>
+      <h2>퇴실 시각</h2>
       <p class="sectionhint">이 시각에 기본 QR이 표시됩니다.</p>
       <div id="checkoutList"></div>
       <button class="addrow" id="addCheckoutBtn">+ 퇴실 시각 추가</button>
-      <p id="migrateNote" class="hintline"></p>
       <p id="legacyNote" class="hintline"></p>
     </div>
+
+    <div class="panel">
+      <h2>실행 요일</h2>
+      <div class="days" id="days"></div>
+    </div>
+
+    </section>
 
     <div class="panel">
       <h2>공지</h2>
@@ -298,19 +300,14 @@
     </div>
 
     <div class="panel">
-      <div id="saveSummary"></div>
+      <p id="migrateNote" class="hintline"></p>
+      <div class="saverow"><span id="statusBadge" class="status">적용 중</span>
+      <span id="saveSummary"></span></div>
       <div id="saveArea">
         <button id="saveBtn">저장</button>
         <button class="ghost" id="resetBtn">취소</button>
       </div>
     </div>
-
-    <div class="panel">
-      <h2>실행 요일</h2>
-      <div class="days" id="days"></div>
-    </div>
-
-    </section>
 
     <details class="panel" id="presetsPanel">
       <summary>저장된 설정 (프리셋)</summary>
@@ -745,7 +742,6 @@
     }
 
     rows(entries.filter((e) => e.kind !== "notice"), $("sumCheckouts"), "등록된 퇴실 시각이 없습니다.");
-    rows(entries.filter((e) => e.kind === "notice"), $("sumNotices"), "없음");
 
     const days = data.active_days || [];
     $("sumDays").textContent = DAY_ORDER.filter((d) => days.includes(d))
@@ -837,6 +833,7 @@
     renderDays(live.active_days);
     refreshDirty();
     showView();
+    toast("되돌렸습니다");
   });
 
   $("saveBtn").addEventListener("click", async () => {
