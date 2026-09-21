@@ -145,11 +145,11 @@ module.exports = async function handler(req, res) {
       presets[presetId] = {
         name,
         schedule: entries,
-        // 구 형식으로도 함께 남겨, 예전 화면에서 열어도 첫 항목은 보이게 한다
-        checkout_time: entries[0].time,
+        // 구 형식으로도 함께 남긴다 (update.js와 같은 기준: 마지막 시각이 대표)
+        checkout_time: entries[entries.length - 1].time,
         checkout_times: entries.map((e) => e.time),
-        qr_image: entries[0].qr_image,
-        after_close_url: entries[0].after_close_url,
+        qr_image: entries[entries.length - 1].qr_image,
+        after_close_url: entries[entries.length - 1].after_close_url,
         active_days: Array.isArray(active_days) && active_days.length
           ? active_days
           : ["mon", "tue", "wed", "thu", "fri"],

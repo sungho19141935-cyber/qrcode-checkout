@@ -110,16 +110,18 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // 구버전 학생 프로그램(자동 업데이트 전)은 schedule을 모르므로,
-  // 첫 항목을 기존 형식으로도 함께 남겨 최소한 한 번은 정상 동작하게 한다.
+  // 구버전 학생 프로그램(자동 업데이트 전)은 schedule을 모르고 시각 하나만 읽는다.
+  // 이때 가장 이른 시각을 주면 점심 퇴실 같은 앞 항목이 대표가 되어, 정작 중요한
+  // 마지막 퇴실을 놓친다. 그래서 마지막 시각을 기존 형식으로 남긴다.
+  const legacy = entries[entries.length - 1];
   const content = JSON.stringify(
     {
       schedule: entries,
-      qr_image: entries[0].qr_image,
-      checkout_time: entries[0].time,
+      qr_image: legacy.qr_image,
+      checkout_time: legacy.time,
       checkout_times: entries.map((e) => e.time),
       active_days: days,
-      after_close_url: entries[0].after_close_url,
+      after_close_url: legacy.after_close_url,
     },
     null,
     2

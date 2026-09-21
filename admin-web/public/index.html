@@ -133,6 +133,8 @@
   #saveArea button { flex: 0 0 auto; }
   #saveBtn { min-width: 120px; }
   #saveSummary { font-size: 0.82rem; color: var(--muted); margin-top: 12px; min-height: 1.2em; }
+  .hintline { font-size: 0.78rem; color: var(--warn); margin: 12px 0 0; }
+  .hintline:empty { display: none; }
   #saveSummary b { color: var(--warn); }
 
   /* 토스트 */
@@ -190,6 +192,7 @@
       <div id="entries"></div>
       <button id="addBtn">+ 시각 추가</button>
 
+      <p id="legacyNote" class="hintline"></p>
       <div id="saveSummary"></div>
       <div id="saveArea">
         <button id="saveBtn">저장</button>
@@ -456,6 +459,12 @@
     $("subtitle").textContent = times.length
       ? "현재 " + times.join(", ") + " 에 표시됩니다."
       : "아직 등록된 일정이 없습니다.";
+    // 여러 개 등록했을 때, 아직 재설치하지 않은 PC는 하나만 받는다는 사실을 알린다
+    $("legacyNote").textContent =
+      times.length > 1
+        ? "아직 프로그램을 업데이트하지 않은 학생 PC에는 마지막 시각(" +
+          times[times.length - 1] + ") 하나만 표시됩니다."
+        : "";
   }
 
   // ---------- 잠금 해제 ----------
