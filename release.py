@@ -46,10 +46,17 @@ def main():
     if result.returncode != 0:
         sys.exit(f"selftest 실패, 배포를 중단합니다:\n{result.stderr.decode('utf-8', 'replace')}")
 
+    # 학생 PC는 raw.githubusercontent.com이 주는 바이트를 그대로 해싱한다. git이
+    # Windows 작업트리에 CRLF로 체크아웃해도 raw는 항상 LF로 서빙하므로, 여기서도
+    # LF로 정규화한 내용의 해시를 기록해야 양쪽이 일치한다.
+    normalized = source.replace(b"\r\n", b"\n")
+    if normalized != source:
+        print(f"(작업트리가 CRLF입니다. LF 기준으로 체크섬을 계산합니다.)")
+
     manifest = {
         "version": version,
         "url": f"{RAW_BASE}/main.py",
-        "sha256": hashlib.sha256(source).hexdigest(),
+        "sha256": hashlib.sha256(normalized).hexdigest(),
         "enabled": True,
     }
     VERSION_JSON.write_text(
