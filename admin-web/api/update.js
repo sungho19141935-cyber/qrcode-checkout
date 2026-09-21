@@ -9,7 +9,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { password, checkout_time, checkout_times, qr_image, active_days, after_close_url } =
+  const { password, checkout_time, checkout_times, qr_image, active_days, after_close_url, schedule } =
     req.body || {};
 
   let passwordOk;
@@ -24,32 +24,72 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // 시각은 여러 개를 받을 수 있다. 구 형식(checkout_time 하나)도 그대로 받아들인다.
-  const rawTimes = Array.isArray(checkout_times)
-    ? checkout_times
-    : String(checkout_times || checkout_time || "").split(",");
-  const times = [...new Set(rawTimes.map((t) => String(t).trim()).filter(Boolean))].sort();
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const IMAGE_RE = /^data:image\/(png|jpeg|jpg|webp);base64,/;
+  const URL_RE = /^https?:\/\//;
 
-  if (!times.length || !qr_image) {
-    res.status(400).json({ error: "QR 이미지와 퇴실 시각을 모두 입력하세요." });
+  // 새 형식은 시각마다 QR/링크를 따로 가진다. 구 형식(공용 QR + 시각 목록)도 그대로 받는다.
+  let entries;
+  if (Array.isArray(schedule) && schedule.length) {
+    entries = schedule.map((e) => ({
+      time: String((e && e.time) || "").trim(),
+      qr_image: (e && e.qr_image) || "",
+      after_close_url: String((e && e.after_close_url) || "").trim(),
+    }));
+  } else {
+    const rawTimes = Array.isArray(checkout_times)
+      ? checkout_times
+      : String(checkout_times || checkout_time || "").split(",");
+    entries = [...new Set(rawTimes.map((t) => String(t).trim()).filter(Boolean))].map((t) => ({
+      time: t,
+      qr_image: qr_image || "",
+      after_close_url: String(after_close_url || "").trim(),
+    }));
+  }
+
+  if (!entries.length) {
+    res.status(400).json({ error: "퇴실 시각을 최소 하나는 등록하세요." });
     return;
   }
-  const badTime = times.find((t) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t));
-  if (badTime) {
-    res.status(400).json({ error: `퇴실 시각은 HH:MM 형식이어야 합니다: "${badTime}"` });
+  if (entries.length > 10) {
+    res.status(400).json({ error: "퇴실 시각은 최대 10개까지 등록할 수 있습니다." });
     return;
   }
-  if (times.length > 10) {
-    res.status(400).json({ error: "퇴실 시각은 최대 10개까지 저장할 수 있습니다." });
+
+  for (const e of entries) {
+    if (!TIME_RE.test(e.time)) {
+      res.status(400).json({ error: `퇴실 시각은 HH:MM 형식이어야 합니다: "${e.time}"` });
+      return;
+    }
+    if (!e.qr_image) {
+      res.status(400).json({ error: `${e.time}에 표시할 QR 이미지를 등록하세요.` });
+      return;
+    }
+    if (!IMAGE_RE.test(e.qr_image)) {
+      res.status(400).json({ error: `${e.time}의 QR은 이미지 파일이어야 합니다.` });
+      return;
+    }
+    if (e.after_close_url && !URL_RE.test(e.after_close_url)) {
+      res.status(400).json({ error: `${e.time}의 링크는 http:// 또는 https://로 시작해야 합니다.` });
+      return;
+    }
+  }
+
+  // 같은 시각이 두 번 등록되면 어느 쪽이 뜰지 알 수 없으므로 막는다
+  const dupe = entries.map((e) => e.time).find((t, i, arr) => arr.indexOf(t) !== i);
+  if (dupe) {
+    res.status(400).json({ error: `같은 시각이 두 번 등록되었습니다: ${dupe}` });
     return;
   }
-  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/.test(qr_image)) {
-    res.status(400).json({ error: "qr_image는 data:image/...;base64, 형식의 이미지여야 합니다." });
-    return;
-  }
+
+  entries.sort((a, b) => a.time.localeCompare(b.time));
+
   // Vercel Serverless Function 요청 본문 한도(4.5MB)를 넘지 않도록 여유를 두고 제한
-  if (qr_image.length > 3_500_000) {
-    res.status(400).json({ error: "이미지가 너무 큽니다. 더 작은 이미지(스크린샷 크롭 등)를 사용하세요." });
+  const totalBytes = entries.reduce((n, e) => n + e.qr_image.length, 0);
+  if (totalBytes > 3_500_000) {
+    res.status(400).json({
+      error: "등록한 이미지 용량 합계가 너무 큽니다. 더 작은 이미지(스크린샷 크롭 등)를 사용하세요.",
+    });
     return;
   }
 
@@ -62,15 +102,6 @@ module.exports = async function handler(req, res) {
     days = active_days;
   }
 
-  let closeUrl = "";
-  if (after_close_url) {
-    if (typeof after_close_url !== "string" || !/^https?:\/\//.test(after_close_url)) {
-      res.status(400).json({ error: "after_close_url은 http:// 또는 https://로 시작하는 URL이어야 합니다." });
-      return;
-    }
-    closeUrl = after_close_url;
-  }
-
   const gistId = process.env.GIST_ID;
   const filename = process.env.GIST_FILENAME;
   const token = process.env.GITHUB_TOKEN;
@@ -79,14 +110,16 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // checkout_time(첫 시각)은 자동 업데이트 전인 구버전 학생 프로그램을 위해 함께 남긴다.
+  // 구버전 학생 프로그램(자동 업데이트 전)은 schedule을 모르므로,
+  // 첫 항목을 기존 형식으로도 함께 남겨 최소한 한 번은 정상 동작하게 한다.
   const content = JSON.stringify(
     {
-      qr_image,
-      checkout_time: times[0],
-      checkout_times: times,
+      schedule: entries,
+      qr_image: entries[0].qr_image,
+      checkout_time: entries[0].time,
+      checkout_times: entries.map((e) => e.time),
       active_days: days,
-      after_close_url: closeUrl,
+      after_close_url: entries[0].after_close_url,
     },
     null,
     2

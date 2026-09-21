@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -89,7 +89,10 @@ def fetch_remote_config(sync_url: str, timeout: int = 10) -> Optional[dict]:
         req = urllib.request.Request(busted_url, headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        if "checkout_time" not in data or not ("qr_image" in data or "checkout_url" in data):
+        has_schedule = isinstance(data.get("schedule"), list) and data["schedule"]
+        if not has_schedule and (
+            "checkout_time" not in data or not ("qr_image" in data or "checkout_url" in data)
+        ):
             log("[QRcode] 원격 설정에 checkout_time과 qr_image(또는 checkout_url)가 필요합니다. 무시합니다.")
             return None
         return data
@@ -199,6 +202,41 @@ def times_of(state: dict) -> list:
     if times:
         return times
     return normalize_times(state.get("checkout_time"))
+
+
+def schedule_of(state: dict) -> list:
+    """시각별 설정 목록을 [{time, qr_image, checkout_url, after_close_url}, ...]로 만든다.
+
+    새 형식(schedule)이 있으면 그것을, 없으면 구 형식(checkout_times + 공용 qr_image)을
+    같은 모양으로 변환해 돌려준다. 항목에 이미지가 없으면 공용 이미지를 물려받는다.
+    """
+    def entry(time_text, source):
+        return {
+            "time": time_text,
+            "qr_image": source.get("qr_image") or state.get("qr_image"),
+            "checkout_url": source.get("checkout_url") or state.get("checkout_url", ""),
+            "after_close_url": (
+                source.get("after_close_url")
+                if source.get("after_close_url") is not None
+                else state.get("after_close_url")
+            ),
+        }
+
+    by_time = {}
+    raw = state.get("schedule")
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            time_text = str(item.get("time", "")).strip()
+            if parse_hhmm(time_text) is not None:
+                by_time[time_text] = entry(time_text, item)
+
+    if not by_time:  # 구 형식: 모든 시각이 같은 QR을 공유
+        for time_text in times_of(state):
+            by_time[time_text] = entry(time_text, state)
+
+    return [by_time[t] for t in sorted(by_time, key=parse_hhmm)]
 
 
 def due_time(now: datetime, times: list, done_today: set, catchup_minutes: int) -> Optional[str]:
@@ -396,6 +434,7 @@ def run_scheduler(config):
     state.setdefault("qr_image", config.get("qr_image"))
     state.setdefault("checkout_time", config.get("checkout_time", DEFAULT_CHECKOUT_TIME))
     state.setdefault("checkout_times", config.get("checkout_times"))
+    state.setdefault("schedule", config.get("schedule"))
     state.setdefault("active_days", config.get("active_days", DEFAULT_ACTIVE_DAYS))
     state.setdefault("after_close_url", config.get("after_close_url"))
 
@@ -406,7 +445,8 @@ def run_scheduler(config):
     synced_once = False
 
     log(
-        f"[QRcode] 시작 v{VERSION} - 예정 시각 {', '.join(times_of(state)) or '없음'}, "
+        f"[QRcode] 시작 v{VERSION} - 예정 시각 "
+        f"{', '.join(e['time'] for e in schedule_of(state)) or '없음'}, "
         f"요일 {state.get('active_days')}, 따라잡기 {catchup_minutes}분"
     )
     if sync_url:
@@ -428,8 +468,8 @@ def run_scheduler(config):
                 # 관리자가 퇴실 시각을 새로 저장했다면 오늘치를 다시 준비한다.
                 # 이걸 안 하면 "오늘 이미 띄웠음" 표시 때문에, 시각을 바꿔 저장해도
                 # 그날은 아무리 기다려도 안 뜬다 (관리자 입장에선 고장으로 보인다).
-                new_times = times_of(remote)
-                if new_times and new_times != times_of(state):
+                new_times = [e["time"] for e in schedule_of(remote)]
+                if new_times and new_times != [e["time"] for e in schedule_of(state)]:
                     if done_today:
                         log(
                             f"[QRcode] 퇴실 시각이 {', '.join(new_times)}(으)로 변경되어 "
@@ -447,13 +487,15 @@ def run_scheduler(config):
                     "active_days"
                 ) or remote.get("after_close_url") != state.get("after_close_url"):
                     log(
-                        f"[QRcode] 설정 갱신됨 -> 시각: {', '.join(times_of(remote)) or '없음'}, "
+                        "[QRcode] 설정 갱신됨 -> 시각: "
+                        f"{', '.join(e['time'] for e in schedule_of(remote)) or '없음'}, "
                         f"요일: {remote.get('active_days', state['active_days'])}"
                     )
                 state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["checkout_time"] = remote.get("checkout_time", state["checkout_time"])
                 state["checkout_times"] = remote.get("checkout_times", state.get("checkout_times"))
+                state["schedule"] = remote.get("schedule", state.get("schedule"))
                 state["active_days"] = remote.get("active_days", state["active_days"])
                 state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
                 save_cache(state)
@@ -470,16 +512,17 @@ def run_scheduler(config):
             done_today = set()
 
         if is_active_day:
-            times = times_of(state)
+            entries = schedule_of(state)
+            times = [e["time"] for e in entries]
             target = due_time(now, times, done_today, catchup_minutes)
             if target:
                 # 한꺼번에 여러 시각을 놓쳤어도 창은 하나만 띄우고, 지나간 것들은
                 # 오늘치를 쓴 것으로 처리한다 (창이 연달아 여러 개 뜨지 않도록).
-                done_today.update(
-                    t for t in times if parse_hhmm(t) <= parse_hhmm(target)
-                )
+                done_today.update(t for t in times if parse_hhmm(t) <= parse_hhmm(target))
+                entry = next(e for e in entries if e["time"] == target)
                 log(f"[QRcode] {now_hm} (설정 {target}) - QR 화면 표시")
-                show_qr_window(state, window_title, display_seconds)
+                # 그 시각에 등록된 QR/링크로 띄운다 (시각마다 다를 수 있다)
+                show_qr_window(entry, window_title, display_seconds)
 
         time.sleep(15)
 
@@ -516,6 +559,20 @@ def main():
         assert due_time(datetime(2026, 1, 1, 18, 0), _t, set(), 120) == "18:00", "시각 선택 오류"
         assert due_time(datetime(2026, 1, 1, 9, 0), _t, set(), 120) == "09:00", "시각 선택 오류"
         assert due_time(datetime(2026, 1, 1, 18, 0), _t, {"18:00"}, 120) is None, "중복 표시 오류"
+        _sched = schedule_of({
+            "schedule": [
+                {"time": "18:00", "qr_image": "B", "after_close_url": "b"},
+                {"time": "12:00", "qr_image": "A", "after_close_url": "a"},
+            ],
+            "qr_image": "공용",
+        })
+        assert [e["time"] for e in _sched] == ["12:00", "18:00"], "일정표 정렬 오류"
+        assert _sched[0]["qr_image"] == "A" and _sched[1]["qr_image"] == "B", "시각별 QR 오류"
+        assert _sched[0]["after_close_url"] == "a", "시각별 링크 오류"
+        _inherit = schedule_of({"schedule": [{"time": "09:00"}], "qr_image": "공용"})
+        assert _inherit[0]["qr_image"] == "공용", "공용 이미지 상속 오류"
+        _legacy = schedule_of({"checkout_times": ["09:00", "18:00"], "qr_image": "공용"})
+        assert len(_legacy) == 2 and _legacy[1]["qr_image"] == "공용", "구 형식 호환 오류"
         make_qr_image("https://example.com/selftest")  # 이미지 생성 경로
         int(config.get("display_seconds", 600))
         print(f"selftest OK (v{VERSION})")
@@ -534,8 +591,11 @@ def main():
                 state["checkout_url"] = remote.get("checkout_url", state.get("checkout_url", ""))
                 state["qr_image"] = remote.get("qr_image", state.get("qr_image"))
                 state["after_close_url"] = remote.get("after_close_url", state.get("after_close_url"))
+                state["schedule"] = remote.get("schedule", state.get("schedule"))
+        # 일정표가 있으면 가장 이른 시각의 설정으로 미리보기 한다
+        entries = schedule_of(state)
         show_qr_window(
-            state,
+            entries[0] if entries else state,
             config.get("window_title", "퇴실 QR코드"),
             int(config.get("display_seconds", 600)),
         )

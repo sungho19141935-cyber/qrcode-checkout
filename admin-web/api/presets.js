@@ -76,6 +76,7 @@ module.exports = async function handler(req, res) {
     qr_image,
     active_days,
     after_close_url,
+    schedule,
   } = req.body || {};
 
   let ok;
@@ -106,31 +107,52 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "save") {
-      if (!name || !checkout_time || !qr_image) {
+      // 새 형식은 시각마다 QR/링크를 가진다. 구 형식도 같은 모양으로 변환해 저장한다.
+      const entries = Array.isArray(schedule) && schedule.length
+        ? schedule.map((e) => ({
+            time: String((e && e.time) || "").trim(),
+            qr_image: (e && e.qr_image) || "",
+            after_close_url: String((e && e.after_close_url) || "").trim(),
+          }))
+        : (Array.isArray(checkout_times) && checkout_times.length
+            ? checkout_times
+            : String(checkout_time || "").split(",")
+          )
+            .map((t) => String(t).trim())
+            .filter(Boolean)
+            .map((t) => ({
+              time: t,
+              qr_image: qr_image || "",
+              after_close_url: String(after_close_url || "").trim(),
+            }));
+
+      if (!name || !entries.length || entries.some((e) => !e.time || !e.qr_image)) {
         res.status(400).json({ error: "설정 이름, 시각, QR 이미지는 필수입니다." });
         return;
       }
       // 프리셋이 쌓일수록 admin_presets.json 전체 용량이 커져 Gist API의 truncation
-      // 한도를 넘기 쉬우므로, 이미지 한 장당 크기를 넉넉히 제한한다.
-      if (qr_image.length > 1_000_000) {
+      // 한도를 넘기 쉬우므로, 프리셋 하나당 이미지 합계를 넉넉히 제한한다.
+      const totalBytes = entries.reduce((n, e) => n + e.qr_image.length, 0);
+      if (totalBytes > 1_500_000) {
         res.status(400).json({
-          error: "이미지가 너무 큽니다. 프리셋에는 500KB 이하로 압축/크롭한 이미지를 사용하세요.",
+          error: "이미지가 너무 큽니다. 프리셋에는 작게 압축/크롭한 이미지를 사용하세요.",
         });
         return;
       }
+
+      entries.sort((a, b) => a.time.localeCompare(b.time));
       const presetId = id && presets[id] ? id : crypto.randomUUID();
-      const times = Array.isArray(checkout_times) && checkout_times.length
-        ? checkout_times
-        : String(checkout_time || "").split(",").map((t) => t.trim()).filter(Boolean);
       presets[presetId] = {
         name,
-        checkout_time: times[0] || checkout_time,
-        checkout_times: times,
-        qr_image,
+        schedule: entries,
+        // 구 형식으로도 함께 남겨, 예전 화면에서 열어도 첫 항목은 보이게 한다
+        checkout_time: entries[0].time,
+        checkout_times: entries.map((e) => e.time),
+        qr_image: entries[0].qr_image,
+        after_close_url: entries[0].after_close_url,
         active_days: Array.isArray(active_days) && active_days.length
           ? active_days
           : ["mon", "tue", "wed", "thu", "fri"],
-        after_close_url: after_close_url || "",
       };
       await savePresets(presets);
       res.status(200).json({ ok: true, id: presetId });
