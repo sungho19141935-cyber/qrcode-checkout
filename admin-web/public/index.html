@@ -139,8 +139,10 @@
   @media (prefers-color-scheme: dark) { .imgstate .tag.custom { color: #7ee2a0; } }
   .entry .drop { width: 72px; height: 72px; }
 
-  #addBtn { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
-  #addBtn:hover { border-color: var(--accent); color: var(--accent); }
+  .sectionhint { font-size: 0.82rem; color: var(--muted); margin: -6px 0 12px; }
+  .empty { font-size: 0.85rem; color: var(--muted); text-align: center; padding: 14px 0; margin: 0; }
+  .addrow { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
+  .addrow:hover { border-color: var(--accent); color: var(--accent); }
 
   /* 요일 */
   .days { display: flex; gap: 6px; }
@@ -233,11 +235,22 @@
     </div>
 
     <div class="panel">
-      <h2>퇴실 일정 <span id="statusBadge" class="status">적용 중</span></h2>
-      <div id="entries"></div>
-      <button id="addBtn">+ 시각 추가</button>
-
+      <h2>퇴실 시각 <span id="statusBadge" class="status">적용 중</span></h2>
+      <p class="sectionhint">이 시각에 기본 QR이 표시됩니다.</p>
+      <div id="checkoutList"></div>
+      <button class="addrow" id="addCheckoutBtn">+ 퇴실 시각 추가</button>
       <p id="legacyNote" class="hintline"></p>
+    </div>
+
+    <div class="panel">
+      <h2>공지</h2>
+      <p class="sectionhint">QR과 무관한 안내입니다. 필요할 때만 추가하세요.</p>
+      <div id="noticeList"></div>
+      <p class="empty" id="noticeEmpty">등록된 공지가 없습니다.</p>
+      <button class="addrow" id="addNoticeBtn">+ 공지 추가</button>
+    </div>
+
+    <div class="panel">
       <div id="saveSummary"></div>
       <div id="saveArea">
         <button id="saveBtn">저장</button>
@@ -357,8 +370,9 @@
     Array.from($("days").querySelectorAll("input")).filter((i) => i.checked).map((i) => i.value);
 
   // ---------- 일정 카드 ----------
-  function addEntry(data) {
+  function addEntry(data, kind) {
     const d = data || {};
+    const listId = (kind || d0.kind) === "notice" ? "noticeList" : "checkoutList";
     const el = document.createElement("div");
     el.className = "entry";
     el.innerHTML =
@@ -366,8 +380,6 @@
       '<input type="file" accept="image/*" hidden /></div>' +
       '<div class="entry-fields">' +
         '<div class="entry-top"><input type="time" />' +
-        '<span class="kind"><button type="button" data-kind="checkout">퇴실</button>' +
-        '<button type="button" data-kind="notice">공지</button></span>' +
         '<button class="link remove">삭제</button></div>' +
         '<input type="text" class="msg-input" placeholder="화면에 함께 띄울 안내 문구 (선택)" />' +
         '<div style="height:8px"></div>' +
@@ -385,7 +397,7 @@
     const revert = el.querySelector(".revert");
 
     el.qrImage = d.qr_image || "";   // 퇴실이면서 비어 있으면 기본 QR을 쓴다는 뜻
-    el.kind = d.kind === "notice" ? "notice" : "checkout";
+    el.kind = listId === "noticeList" ? "notice" : "checkout";
     time.value = d.time || "";
     link.value = d.after_close_url || "";
     msg.value = d.message || "";
@@ -409,9 +421,6 @@
       drop.appendChild(file);
 
       el.classList.toggle("notice", isNotice);
-      el.querySelectorAll(".kind button").forEach((b) => {
-        b.classList.toggle("on", b.dataset.kind === el.kind);
-      });
       msg.placeholder = isNotice
         ? "안내 문구 (이미지 없으면 이 문구만 크게 표시)"
         : "화면에 함께 띄울 안내 문구 (선택)";
@@ -453,24 +462,20 @@
       refreshDirty();
       toast(el.kind === "notice" ? "이미지를 뺐습니다" : "기본 QR을 쓰도록 되돌렸습니다");
     });
-    el.querySelectorAll(".kind button").forEach((b) => {
-      b.addEventListener("click", () => {
-        el.kind = b.dataset.kind;
-        paint();
-        refreshDirty();
-      });
-    });
+
     time.addEventListener("input", () => { paint(); refreshDirty(); });
     link.addEventListener("input", refreshDirty);
     msg.addEventListener("input", refreshDirty);
     el.querySelector(".remove").addEventListener("click", () => {
+      const wasNotice = el.kind === "notice";
       el.remove();
-      if (!$("entries").children.length) addEntry();
+      // 퇴실은 최소 하나 있어야 QR이 뜬다. 공지는 0개여도 된다.
+      if (!wasNotice && !$("checkoutList").children.length) addEntry({}, "checkout");
       refreshDirty();
     });
 
     paint();
-    $("entries").appendChild(el);
+    $(listId).appendChild(el);
     return el;
   }
 
@@ -492,7 +497,8 @@
     }
     drop.appendChild(file);
     $("baseEditBtn").textContent = baseImage ? "수정하기" : "등록하기";
-    Array.from($("entries").children).forEach((el) => el.repaint && el.repaint());
+    [...$("checkoutList").children, ...$("noticeList").children]
+      .forEach((el) => el.repaint && el.repaint());
   }
 
   let pasteTarget = null;
@@ -526,12 +532,26 @@
   });
 
   function renderEntries(list) {
-    $("entries").innerHTML = "";
-    (list && list.length ? list : [{}]).forEach(addEntry);
+    $("checkoutList").innerHTML = "";
+    $("noticeList").innerHTML = "";
+    const all = list || [];
+    const checkouts = all.filter((e) => e.kind !== "notice");
+    const notices = all.filter((e) => e.kind === "notice");
+    (checkouts.length ? checkouts : [{}]).forEach((e) => addEntry(e, "checkout"));
+    notices.forEach((e) => addEntry(e, "notice"));
+    updateNoticeEmpty();
+  }
+
+  function updateNoticeEmpty() {
+    $("noticeEmpty").style.display = $("noticeList").children.length ? "none" : "block";
   }
 
   function collect() {
-    return Array.from($("entries").children).map((el) => ({
+    const rows = [
+      ...Array.from($("checkoutList").children),
+      ...Array.from($("noticeList").children),
+    ];
+    return rows.map((el) => ({
       time: el.querySelector("input[type=time]").value.trim(),
       qr_image: el.qrImage || "",
       kind: el.kind,
@@ -542,8 +562,11 @@
 
   // ---------- 변경 감지 ----------
   function sign(entries, days, base) {
+    const sorted = entries
+      .slice()
+      .sort((a, b) => (a.time + a.kind).localeCompare(b.time + b.kind));
     return JSON.stringify([
-      entries.map((e) => [
+      sorted.map((e) => [
         e.time, e.kind || "checkout", (e.qr_image || "").slice(0, 80), e.message || "", e.after_close_url,
       ]),
       days,
@@ -645,7 +668,15 @@
   $("unlockBtn").addEventListener("click", unlock);
   $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
 
-  $("addBtn").addEventListener("click", () => { addEntry(); refreshDirty(); });
+  $("addCheckoutBtn").addEventListener("click", () => {
+    addEntry({}, "checkout");
+    refreshDirty();
+  });
+  $("addNoticeBtn").addEventListener("click", () => {
+    addEntry({}, "notice");
+    updateNoticeEmpty();
+    refreshDirty();
+  });
   $("resetBtn").addEventListener("click", () => {
     baseImage = liveBase(live);
     paintBase();
@@ -670,6 +701,10 @@
       if (e.after_close_url && !/^https?:\/\//.test(e.after_close_url)) {
         toast(e.time + " 의 링크는 http(s)로 시작해야 합니다", true); return;
       }
+    }
+    if (!schedule.some((e) => e.kind !== "notice")) {
+      toast("퇴실 시각을 최소 하나는 등록하세요", true);
+      return;
     }
     const times = schedule.map((e) => e.time);
     const dupe = times.find((t, i) => times.indexOf(t) !== i);
