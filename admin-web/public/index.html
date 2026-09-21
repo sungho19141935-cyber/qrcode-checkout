@@ -117,6 +117,7 @@
   #baseRow { display: flex; gap: 16px; align-items: center; }
   #baseDrop { width: 110px; height: 110px; flex: none; }
   #baseInfo { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  #baseEditBtn { margin-top: 10px; padding: 7px 14px; font-size: 0.82rem; }
   #baseInfo b { color: var(--text); }
 
   /* 종류 전환 */
@@ -219,11 +220,14 @@
           <span>클릭 · 드래그<br>또는 붙여넣기</span>
           <input type="file" accept="image/*" hidden />
         </div>
+        <div>
         <div id="baseInfo">
           한 번 등록하면 <b>계속 유지</b>됩니다.<br>
           모든 <b>퇴실</b> 시각에 이 QR이 표시됩니다.<br>
           특정 시각만 다르게 하려면 아래에서 지정하고,<br>
           QR과 무관한 안내는 <b>공지</b>로 추가하세요.
+        </div>
+        <button class="ghost" id="baseEditBtn">수정하기</button>
         </div>
       </div>
     </div>
@@ -487,6 +491,7 @@
       drop.appendChild(span);
     }
     drop.appendChild(file);
+    $("baseEditBtn").textContent = baseImage ? "수정하기" : "등록하기";
     Array.from($("entries").children).forEach((el) => el.repaint && el.repaint());
   }
 
@@ -503,6 +508,7 @@
       toast("기본 QR을 바꿨습니다");
     }
     drop.addEventListener("click", () => file.click());
+    $("baseEditBtn").addEventListener("click", () => file.click());
     file.addEventListener("change", () => use(file.files[0]));
     drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
     drop.addEventListener("dragleave", () => drop.classList.remove("over"));
