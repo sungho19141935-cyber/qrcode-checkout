@@ -128,6 +128,7 @@
   }
   .kind button.on { background: var(--accent); color: #fff; }
   .entry.notice { border-left: 3px solid var(--warn); }
+  .entry.timeonly { grid-template-columns: 1fr; }
 
   /* 항목별 이미지 상태 */
   .imgstate { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
@@ -404,6 +405,10 @@
 
     function paint() {
       const isNotice = el.kind === "notice";
+      if (!isNotice && el.classList.contains("timeonly")) {
+        el.classList.toggle("invalid", !!time.value && !TIME_RE.test(time.value));
+        return;   // 퇴실 행에는 이미지 관련 요소가 없다
+      }
       // 공지는 기본 QR을 물려받지 않는다 (엉뚱한 QR을 찍게 되므로)
       const shown = el.qrImage || (isNotice ? "" : baseImage);
       drop.innerHTML = "";
@@ -473,6 +478,14 @@
       if (!wasNotice && !$("checkoutList").children.length) addEntry({}, "checkout");
       refreshDirty();
     });
+
+    if (el.kind !== "notice") {
+      // 퇴실 시각의 QR은 위 "기본 QR" 한 곳에서만 관리한다.
+      // 행마다 이미지 칸을 두면 같은 일을 두 군데서 하게 되어 헷갈린다.
+      el.classList.add("timeonly");
+      drop.remove();
+      el.querySelector(".imgstate").remove();
+    }
 
     paint();
     $(listId).appendChild(el);
