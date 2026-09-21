@@ -81,12 +81,48 @@
   }
   .days input { width: auto; margin: 0; }
   .btn-row { display: flex; gap: 8px; }
+  #liveCard { border-left: 4px solid #1f883d; }
+  #liveCard.stale { border-left-color: #bf8700; }
+  #liveCard h2 { font-size: 0.95rem; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #1f883d; flex: none; }
+  #liveCard.stale .dot { background: #bf8700; }
+  .live-row { display: flex; gap: 10px; font-size: 0.9rem; padding: 3px 0; }
+  .live-row dt { color: #656d76; flex: none; width: 76px; margin: 0; }
+  .live-row dd { margin: 0; font-weight: 600; }
+  .live-times { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    background: #ddf4e4; color: #0d4a20; border-radius: 999px;
+    padding: 2px 10px; font-weight: 700; font-size: 0.9rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    .chip { background: #12341d; color: #7ee2a0; }
+    .live-row dt { color: #8b949e; }
+  }
+  #liveThumb { width: 56px; height: 56px; object-fit: contain; background: #fff; border-radius: 6px; }
+  #liveNote { font-size: 0.85rem; color: #bf8700; margin: 10px 0 0; display: none; }
+  #liveCard.stale #liveNote { display: block; }
   .btn-row button { margin-top: 8px; }
 </style>
 </head>
 <body>
   <h1>퇴실 QR 관리자</h1>
   <p class="sub">비밀번호로 로그인 후 QR 이미지와 퇴실 시각을 갱신하세요.</p>
+
+  <div class="card" id="liveCard">
+    <h2><span class="dot"></span><span id="liveTitle">지금 적용 중인 설정</span></h2>
+    <div id="liveBody">
+      <dl>
+        <div class="live-row">
+          <dt>퇴실 시각</dt>
+          <dd><div class="live-times" id="liveTimes">불러오는 중...</div></dd>
+        </div>
+        <div class="live-row"><dt>요일</dt><dd id="liveDays">-</dd></div>
+        <div class="live-row"><dt>QR</dt><dd id="liveQr">-</dd></div>
+        <div class="live-row"><dt>닫을 때 링크</dt><dd id="liveLink">-</dd></div>
+      </dl>
+      <p id="liveNote">아래 입력칸이 지금 적용 중인 값과 다릅니다. 저장해야 반영됩니다.</p>
+    </div>
+  </div>
 
   <div class="card">
     <label for="password">관리자 비밀번호</label>
@@ -180,6 +216,54 @@
     return dayEls.filter((el) => el.checked).map((el) => el.value);
   }
 
+  // ---- 지금 적용 중인 설정 패널 ----
+  const DAY_LABEL = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+  let liveConfig = null;
+
+  function renderLive(data) {
+    liveConfig = data;
+    const times = (data.checkout_times || [data.checkout_time]).filter(Boolean);
+    document.getElementById("liveTimes").innerHTML =
+      times.length
+        ? times.map((t) => `<span class="chip">${t}</span>`).join("")
+        : "<span class='chip'>설정 없음</span>";
+    const days = data.active_days || [];
+    document.getElementById("liveDays").textContent =
+      days.length ? days.map((d) => DAY_LABEL[d] || d).join(" ") : "-";
+    document.getElementById("liveQr").innerHTML = data.qr_image
+      ? `<img id="liveThumb" src="${data.qr_image}" alt="현재 QR" />`
+      : "등록된 이미지 없음";
+    document.getElementById("liveLink").textContent = data.after_close_url || "없음";
+    markStale();
+  }
+
+  // 입력칸이 적용 중인 값과 다르면 "저장해야 반영됨"을 알린다
+  function markStale() {
+    if (!liveConfig) return;
+    const liveTimes = (liveConfig.checkout_times || [liveConfig.checkout_time]).filter(Boolean);
+    const formTimes = timeEl.value.split(",").map((t) => t.trim()).filter(Boolean);
+    const liveDays = (liveConfig.active_days || []).join(",");
+    const formDays = getActiveDays().join(",");
+    const touched = timeEl.value.trim() !== "" || formTimes.length > 0;
+    const differs =
+      touched &&
+      (formTimes.join(",") !== liveTimes.join(",") ||
+        formDays !== liveDays ||
+        afterCloseUrlEl.value.trim() !== (liveConfig.after_close_url || ""));
+    document.getElementById("liveCard").classList.toggle("stale", differs);
+  }
+
+  async function refreshLive() {
+    try {
+      const r = await fetch("/api/current?t=" + Date.now());
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "불러오기 실패");
+      renderLive(data);
+    } catch (e) {
+      document.getElementById("liveTimes").textContent = "불러오지 못했습니다: " + e.message;
+    }
+  }
+
   function showMsg(text, type) {
     msgEl.textContent = text;
     msgEl.className = "msg" + (type ? " " + type : "");
@@ -193,6 +277,11 @@
       reader.readAsDataURL(file);
     });
   }
+
+  timeEl.addEventListener("input", markStale);
+  afterCloseUrlEl.addEventListener("input", markStale);
+  dayEls.forEach((el) => el.addEventListener("change", markStale));
+  refreshLive();  // 비밀번호 없이도 읽기 전용으로 바로 보여준다
 
   fileEl.addEventListener("change", async () => {
     const file = fileEl.files[0];
@@ -217,6 +306,7 @@
         previewEl.style.display = "block";
         qrImageDataUrl = data.qr_image; // 새 파일을 안 고르면 이 기존 이미지 그대로 저장됨
       }
+      renderLive(data);
       showMsg("현재 값을 불러왔습니다.", "ok");
     } catch (e) {
       showMsg("오류: " + e.message, "error");
@@ -270,6 +360,7 @@
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "저장 실패");
       showMsg("저장 완료! 학생 PC에는 곧 자동으로 반영됩니다.", "ok");
+      await refreshLive();
     } catch (e) {
       showMsg("오류: " + e.message, "error");
     } finally {
