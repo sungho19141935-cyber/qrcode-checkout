@@ -96,6 +96,28 @@ QR 이미지가 아직 한 번도 동기화되지 않았을 때만 쓰이는 URL
 
 ---
 
+## 1-2. 프로그램 수정 후 배포 (자동 업데이트)
+
+학생 프로그램은 1시간마다 `version.json`을 확인해, 버전이 다르면 새 `main.py`를
+내려받아 **체크섬 → 문법 → 실제 실행(`--selftest`)** 검증을 모두 통과한 경우에만
+교체하고 스스로 재시작합니다. 직전 버전은 `main.py.bak`으로 남습니다.
+학생에게 재설치를 다시 안내할 필요가 없습니다.
+
+`main.py`를 고쳤다면:
+
+```bash
+# 1. main.py 안의 VERSION 을 올린다 (예: 1.1.0 -> 1.1.1)
+# 2. 매니페스트 생성 (selftest가 실패하면 여기서 중단됩니다)
+python release.py
+# 3. 함께 커밋 & 푸시
+git add main.py version.json && git commit -m "..." && git push
+```
+
+**비상 중단:** 잘못된 버전을 내보냈다면 `version.json`의 `"enabled"`를 `false`로
+바꿔 푸시하세요. 아직 업데이트하지 않은 학생 PC는 그 자리에서 멈춥니다.
+
+---
+
 ## 2. 학생 PC에서 실행
 
 개인 노트북에 배포하는 경우 Windows의 **스마트 앱 제어(Smart App Control)/SmartScreen**이
