@@ -5,650 +5,624 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>퇴실 QR 관리자</title>
 <style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    max-width: 480px;
-    margin: 60px auto;
-    padding: 0 20px;
-    color: #1f2328;
-    background: #fff;
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d8dee4;
+    --text: #1f2328;
+    --muted: #656d76;
+    --accent: #1f883d;
+    --accent-soft: #ddf4e4;
+    --warn: #9a6700;
+    --warn-soft: #fff8c5;
+    --danger: #cf222e;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(31, 35, 40, 0.08);
   }
   @media (prefers-color-scheme: dark) {
-    body { color: #e6edf3; background: #0d1117; }
-    input, select { background: #161b22; color: #e6edf3; border-color: #30363d; }
-    .card, details, .sched-row { background: #161b22; border-color: #30363d; }
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #238636;
+      --accent-soft: #12341d;
+      --warn: #d29922;
+      --warn-soft: #2b2411;
+      --shadow: none;
+    }
   }
-  h1 { font-size: 1.4rem; margin-bottom: 4px; }
-  p.sub { color: #656d76; margin-top: 0; font-size: 0.9rem; }
-  .card, details {
-    border: 1px solid #d0d7de;
-    border-radius: 10px;
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    margin: 0;
+    padding: 0 16px 140px;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  header { padding: 32px 0 8px; }
+  h1 { font-size: 1.3rem; margin: 0; letter-spacing: -0.01em; }
+  header p { color: var(--muted); font-size: 0.88rem; margin: 6px 0 0; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     padding: 20px;
-    margin-top: 20px;
+    margin-top: 16px;
   }
-  summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
-  details[open] summary { margin-bottom: 8px; }
-  label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 4px; }
-  input, select {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px 10px;
-    border: 1px solid #d0d7de;
-    border-radius: 6px;
-    font-size: 0.95rem;
-    font-family: inherit;
+  .panel h2 {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 14px; font-weight: 700;
   }
+
+  label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 6px; }
+  input[type=text], input[type=password], input[type=time], select {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 0.95rem; font-family: inherit;
+    background: var(--surface); color: var(--text);
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
   button {
-    margin-top: 18px;
-    width: 100%;
-    padding: 10px;
-    border: none;
-    border-radius: 6px;
-    background: #1f883d;
-    color: white;
-    font-weight: 600;
-    font-size: 0.95rem;
-    cursor: pointer;
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    border: 1px solid transparent; border-radius: 8px;
+    padding: 10px 16px; cursor: pointer;
+    background: var(--accent); color: #fff;
   }
-  button.secondary { background: #57606a; margin-top: 8px; }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .msg { margin-top: 14px; font-size: 0.88rem; white-space: pre-wrap; }
-  .msg.error { color: #cf222e; }
-  .msg.ok { color: #1a7f37; }
-  .hint { color: #656d76; font-size: 0.8rem; margin-top: 20px; }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  button.ghost:hover { background: var(--bg); }
+  button.link { background: none; border: none; color: var(--muted); padding: 4px 8px; font-size: 0.82rem; }
+  button.link:hover { color: var(--danger); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.block { width: 100%; }
+
+  /* 잠금 화면 */
+  #lock { margin-top: 60px; text-align: center; }
+  #lock .panel { padding: 28px 24px; }
+  #lock .lockicon { font-size: 1.8rem; }
+  #lock p { color: var(--muted); font-size: 0.88rem; margin: 8px 0 20px; }
+
+  /* 일정 카드 */
+  .entry {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 12px; background: var(--surface);
+    display: grid; grid-template-columns: 96px 1fr; gap: 14px;
+  }
+  .entry.invalid { border-color: var(--danger); }
+  .drop {
+    width: 96px; height: 96px; border-radius: 10px;
+    border: 2px dashed var(--border); background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; overflow: hidden; position: relative; text-align: center;
+  }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .drop span { font-size: 0.72rem; color: var(--muted); line-height: 1.4; padding: 4px; }
+  .entry-fields { min-width: 0; }
+  .entry-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .entry-top input[type=time] {
+    font-size: 1.15rem; font-weight: 700; padding: 6px 10px; width: auto; flex: 1;
+  }
+  .entry .hint { font-size: 0.75rem; color: var(--muted); margin: 6px 0 0; }
+
+  #addBtn { width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--muted); }
+  #addBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 요일 */
   .days { display: flex; gap: 6px; }
   .days label {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    font-weight: 400;
-    font-size: 0.8rem;
-    margin: 0;
-    border: 1px solid #d0d7de;
-    border-radius: 6px;
-    padding: 8px 0;
-    cursor: pointer;
+    flex: 1; margin: 0; text-align: center; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 0;
+    font-weight: 600; font-size: 0.85rem; color: var(--muted);
+    user-select: none;
   }
-  @media (prefers-color-scheme: dark) { .days label { border-color: #30363d; } }
-  .days input { width: auto; margin: 0; }
-  .btn-row { display: flex; gap: 8px; }
-  .btn-row button { margin-top: 8px; }
+  .days input { display: none; }
+  .days input:checked + span { color: #fff; }
+  .days label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-  /* 지금 적용 중인 설정 */
-  #liveCard { border-left: 4px solid #1f883d; }
-  #liveCard.stale { border-left-color: #bf8700; }
-  #liveCard h2 { font-size: 0.95rem; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #1f883d; flex: none; }
-  #liveCard.stale .dot { background: #bf8700; }
-  .live-entry {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 0; border-top: 1px solid #d0d7de;
+  /* 저장 바 */
+  #savebar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 16px; display: none;
   }
-  .live-entry:first-child { border-top: none; }
-  @media (prefers-color-scheme: dark) { .live-entry { border-color: #30363d; } }
-  .live-entry img { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
-  .live-entry .t { font-weight: 700; font-size: 1rem; }
-  .live-entry .l { color: #656d76; font-size: 0.78rem; word-break: break-all; }
-  .live-meta { font-size: 0.85rem; color: #656d76; margin-top: 10px; }
-  #liveNote { font-size: 0.85rem; color: #bf8700; margin: 10px 0 0; display: none; }
-  #liveCard.stale #liveNote { display: block; }
+  #savebar.show { display: block; }
+  #savebar .inner {
+    max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 12px;
+  }
+  #saveSummary { flex: 1; font-size: 0.83rem; color: var(--muted); }
+  #saveSummary b { color: var(--warn); }
 
-  /* 일정 편집 행 */
-  .sched-row {
-    border: 1px solid #d0d7de; border-radius: 8px;
-    padding: 12px; margin-top: 10px;
+  /* 토스트 */
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(20px);
+    bottom: 88px; background: #1f2328; color: #fff;
+    padding: 11px 18px; border-radius: 999px; font-size: 0.87rem; font-weight: 600;
+    opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none;
+    max-width: 90vw; text-align: center; z-index: 10;
   }
-  .sched-head { display: flex; gap: 8px; align-items: center; }
-  .sched-head input { flex: 1; font-weight: 700; }
-  .sched-head button { width: auto; margin: 0; padding: 8px 12px; flex: none; background: #57606a; }
-  .sched-row label { margin: 10px 0 4px; font-size: 0.78rem; font-weight: 500; color: #656d76; }
-  .sched-row img { max-width: 110px; margin-top: 8px; border: 1px solid #d0d7de; border-radius: 6px; display: none; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.error { background: var(--danger); }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .status.dirty { background: var(--warn-soft); color: var(--warn); }
+  @media (prefers-color-scheme: dark) { .status { color: #7ee2a0; } }
+
+  details summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; color: var(--muted); }
+  details[open] summary { margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .sep { height: 1px; background: var(--border); margin: 18px 0; }
+  .msg { font-size: 0.83rem; margin-top: 10px; color: var(--muted); }
+  .msg.error { color: var(--danger); }
+  .msg.ok { color: var(--accent); }
 </style>
 </head>
 <body>
-  <h1>퇴실 QR 관리자</h1>
-  <p class="sub">시각마다 QR과 링크를 따로 등록할 수 있습니다.</p>
+<div class="wrap">
+  <header>
+    <h1>퇴실 QR 관리자</h1>
+    <p id="subtitle">시각마다 QR과 링크를 따로 등록합니다.</p>
+  </header>
 
-  <div class="card" id="liveCard">
-    <h2><span class="dot"></span>지금 적용 중인 설정</h2>
-    <div id="liveEntries">불러오는 중...</div>
-    <div class="live-meta" id="liveDays">-</div>
-    <p id="liveNote">아래 입력한 내용이 지금 적용 중인 값과 다릅니다. 저장해야 반영됩니다.</p>
+  <!-- 잠금 화면 -->
+  <div id="lock">
+    <div class="panel">
+      <div class="lockicon">🔒</div>
+      <p>관리자 비밀번호를 입력하세요.</p>
+      <input id="password" type="password" autocomplete="current-password" placeholder="비밀번호" />
+      <div style="height:12px"></div>
+      <button id="unlockBtn" class="block">잠금 해제</button>
+      <div id="lockMsg" class="msg"></div>
+    </div>
   </div>
 
-  <div class="card">
-    <label for="password">관리자 비밀번호</label>
-    <input id="password" type="password" autocomplete="current-password" />
-
-    <label>퇴실 일정</label>
-    <div id="scheduleList"></div>
-    <button id="addRowBtn" class="secondary" type="button">+ 시각 추가</button>
-
-    <label>실행 요일</label>
-    <div class="days">
-      <label><input type="checkbox" value="mon" checked />월</label>
-      <label><input type="checkbox" value="tue" checked />화</label>
-      <label><input type="checkbox" value="wed" checked />수</label>
-      <label><input type="checkbox" value="thu" checked />목</label>
-      <label><input type="checkbox" value="fri" checked />금</label>
-      <label><input type="checkbox" value="sat" />토</label>
-      <label><input type="checkbox" value="sun" />일</label>
+  <!-- 편집 화면 -->
+  <main id="editor" hidden>
+    <div class="panel">
+      <h2>퇴실 일정 <span id="statusBadge" class="status">적용 중</span></h2>
+      <div id="entries"></div>
+      <button id="addBtn">+ 시각 추가</button>
     </div>
 
-    <button id="loadBtn" class="secondary" type="button">현재 값 불러오기</button>
-    <button id="saveBtn" type="button">저장</button>
+    <div class="panel">
+      <h2>실행 요일</h2>
+      <div class="days" id="days"></div>
+    </div>
 
-    <div id="msg" class="msg"></div>
+    <details class="panel" id="presetsPanel">
+      <summary>저장된 설정 (프리셋)</summary>
+      <select id="presetSelect"></select>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="presetRenameBtn">이름 변경</button>
+        <button class="ghost" id="presetDeleteBtn">삭제</button>
+      </div>
+      <div class="sep"></div>
+      <label for="presetName">지금 화면의 일정을 이름 붙여 저장</label>
+      <div class="row">
+        <input id="presetName" type="text" placeholder="예: 평일 2회" />
+        <button class="ghost" id="presetSaveBtn" style="flex:0 0 auto">저장</button>
+      </div>
+      <div id="presetMsg" class="msg"></div>
+    </details>
+
+    <details class="panel">
+      <summary>비밀번호 변경</summary>
+      <label for="newPw">새 비밀번호 (6자 이상)</label>
+      <input id="newPw" type="password" autocomplete="new-password" />
+      <div style="height:10px"></div>
+      <label for="newPw2">새 비밀번호 확인</label>
+      <input id="newPw2" type="password" autocomplete="new-password" />
+      <div style="height:12px"></div>
+      <button class="ghost block" id="changePwBtn">변경</button>
+      <div id="pwMsg" class="msg"></div>
+    </details>
+  </main>
+</div>
+
+<div id="savebar">
+  <div class="inner">
+    <div id="saveSummary"></div>
+    <button class="ghost" id="resetBtn">되돌리기</button>
+    <button id="saveBtn">저장</button>
   </div>
-
-  <p class="hint">저장하면 학생 프로그램은 1분 내로 자동으로 새 설정을 받아갑니다.<br>
-  시각을 여러 개 등록하면 하루에 그만큼, 각자 등록한 QR로 뜹니다.</p>
-
-  <details id="presetsDetails">
-    <summary>저장된 설정 불러오기 / 저장하기</summary>
-
-    <label for="presetSelect">선택하면 바로 위 입력칸에 채워집니다</label>
-    <select id="presetSelect"><option value="">비밀번호 입력 후 펼치면 자동으로 불러옵니다</option></select>
-
-    <div class="btn-row">
-      <button id="presetRenameBtn" class="secondary" type="button">이름 변경</button>
-      <button id="presetDeleteBtn" class="secondary" type="button">삭제</button>
-    </div>
-
-    <label for="presetName">현재 값을 새 이름으로 저장</label>
-    <input id="presetName" type="text" placeholder="예: 설정1" />
-    <button id="presetSaveBtn" class="secondary" type="button">저장</button>
-
-    <div id="presetMsg" class="msg"></div>
-  </details>
-
-  <details id="pwDetails">
-    <summary>비밀번호 변경</summary>
-
-    <label for="currentPw">현재 비밀번호</label>
-    <input id="currentPw" type="password" autocomplete="current-password" />
-
-    <label for="newPw">새 비밀번호 (6자 이상)</label>
-    <input id="newPw" type="password" autocomplete="new-password" />
-
-    <label for="newPw2">새 비밀번호 확인</label>
-    <input id="newPw2" type="password" autocomplete="new-password" />
-
-    <button id="changePwBtn" class="secondary" type="button">변경</button>
-
-    <div id="pwMsg" class="msg"></div>
-  </details>
+</div>
+<div id="toast"></div>
 
 <script>
-  const msgEl = document.getElementById("msg");
-  const passwordEl = document.getElementById("password");
-  const dayEls = Array.from(document.querySelectorAll(".days input"));
-  const loadBtn = document.getElementById("loadBtn");
-  const saveBtn = document.getElementById("saveBtn");
-  const listEl = document.getElementById("scheduleList");
-  const addRowBtn = document.getElementById("addRowBtn");
-
-  const DEFAULT_DAYS = ["mon", "tue", "wed", "thu", "fri"];
-  const DAY_LABEL = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+  const $ = (id) => document.getElementById(id);
+  const DAYS = [["mon","월"],["tue","화"],["wed","수"],["thu","목"],["fri","금"],["sat","토"],["sun","일"]];
   const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-  function setActiveDays(days) {
-    const set = new Set(days && days.length ? days : DEFAULT_DAYS);
-    dayEls.forEach((el) => { el.checked = set.has(el.value); });
+  let password = "";
+  let live = null;        // 서버에 저장된 현재 설정
+  let presetsCache = {};
+
+  // ---------- 공통 ----------
+  function toast(text, isError) {
+    const el = $("toast");
+    el.textContent = text;
+    el.className = "show" + (isError ? " error" : "");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = ""; }, 2600);
   }
 
-  function getActiveDays() {
-    return dayEls.filter((el) => el.checked).map((el) => el.value);
-  }
-
-  function showMsg(text, type) {
-    msgEl.textContent = text;
-    msgEl.className = "msg" + (type ? " " + type : "");
+  function setMsg(el, text, type) {
+    el.textContent = text;
+    el.className = "msg" + (type ? " " + type : "");
   }
 
   function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
     });
   }
 
-  // ---- 일정 행 ----
-  function addRow(entry) {
-    const data = entry || {};
-    const row = document.createElement("div");
-    row.className = "sched-row";
-    row.innerHTML =
-      '<div class="sched-head">' +
-      '<input class="sched-time" type="text" placeholder="18:00" />' +
-      '<button class="sched-del" type="button">삭제</button>' +
-      '</div>' +
-      '<label>이 시각에 띄울 QR 이미지</label>' +
-      '<input class="sched-file" type="file" accept="image/*" />' +
-      '<img class="sched-thumb" alt="QR 미리보기" />' +
-      '<label>클릭해서 닫을 때 열릴 링크 (선택)</label>' +
-      '<input class="sched-link" type="text" placeholder="https://..." />';
-
-    const timeEl = row.querySelector(".sched-time");
-    const fileEl = row.querySelector(".sched-file");
-    const thumbEl = row.querySelector(".sched-thumb");
-    const linkEl = row.querySelector(".sched-link");
-
-    timeEl.value = data.time || "";
-    linkEl.value = data.after_close_url || "";
-    // 이미지는 행 객체가 들고 있는다 (파일을 다시 고르지 않아도 유지되도록)
-    row.qrImage = data.qr_image || null;
-    if (row.qrImage) {
-      thumbEl.src = row.qrImage;
-      thumbEl.style.display = "block";
-    }
-
-    fileEl.addEventListener("change", async () => {
-      const file = fileEl.files[0];
-      if (!file) return;
-      row.qrImage = await readFileAsDataUrl(file);
-      thumbEl.src = row.qrImage;
-      thumbEl.style.display = "block";
-      markStale();
-    });
-    row.querySelector(".sched-del").addEventListener("click", () => {
-      row.remove();
-      if (!listEl.children.length) addRow();
-      markStale();
-    });
-    timeEl.addEventListener("input", markStale);
-    linkEl.addEventListener("input", markStale);
-
-    listEl.appendChild(row);
-    return row;
-  }
-
-  function renderRows(entries) {
-    listEl.innerHTML = "";
-    const list = entries && entries.length ? entries : [{}];
-    list.forEach(addRow);
-  }
-
-  function collectSchedule() {
-    return Array.from(listEl.children).map((row) => ({
-      time: row.querySelector(".sched-time").value.trim(),
-      qr_image: row.qrImage || "",
-      after_close_url: row.querySelector(".sched-link").value.trim(),
-    }));
-  }
-
-  // 응답을 일정 배열로 통일한다 (구 형식도 받아들임)
   function toEntries(data) {
-    if (Array.isArray(data.schedule) && data.schedule.length) return data.schedule;
-    const times = (data.checkout_times || [data.checkout_time]).filter(Boolean);
+    if (data && Array.isArray(data.schedule) && data.schedule.length) {
+      return data.schedule.map((e) => ({
+        time: e.time || "",
+        qr_image: e.qr_image || "",
+        after_close_url: e.after_close_url || "",
+      }));
+    }
+    const times = ((data && data.checkout_times) || [data && data.checkout_time]).filter(Boolean);
     return times.map((t) => ({
       time: t,
-      qr_image: data.qr_image || "",
-      after_close_url: data.after_close_url || "",
+      qr_image: (data && data.qr_image) || "",
+      after_close_url: (data && data.after_close_url) || "",
     }));
   }
 
-  // ---- 지금 적용 중인 설정 ----
-  let liveConfig = null;
-
-  function renderLive(data) {
-    liveConfig = data;
-    const entries = toEntries(data);
-    const box = document.getElementById("liveEntries");
-    if (!entries.length) {
-      box.textContent = "등록된 일정이 없습니다.";
-    } else {
-      box.innerHTML = "";
-      entries.forEach((e) => {
-        const div = document.createElement("div");
-        div.className = "live-entry";
-        if (e.qr_image) {
-          const img = document.createElement("img");
-          img.src = e.qr_image;
-          img.alt = "QR";
-          div.appendChild(img);
-        }
-        const text = document.createElement("div");
-        const t = document.createElement("div");
-        t.className = "t";
-        t.textContent = e.time;
-        const l = document.createElement("div");
-        l.className = "l";
-        l.textContent = e.after_close_url || "링크 없음";
-        text.appendChild(t);
-        text.appendChild(l);
-        div.appendChild(text);
-        box.appendChild(div);
-      });
-    }
-    const days = data.active_days || [];
-    document.getElementById("liveDays").textContent =
-      "실행 요일: " + (days.length ? days.map((d) => DAY_LABEL[d] || d).join(" ") : "-");
-    markStale();
+  // ---------- 요일 ----------
+  function renderDays(active) {
+    const set = new Set(active && active.length ? active : ["mon","tue","wed","thu","fri"]);
+    $("days").innerHTML = "";
+    DAYS.forEach(([value, text]) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = value;
+      input.checked = set.has(value);
+      input.addEventListener("change", refreshDirty);
+      const span = document.createElement("span");
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      $("days").appendChild(label);
+    });
   }
 
-  function signature(entries, days) {
+  const getDays = () =>
+    Array.from($("days").querySelectorAll("input")).filter((i) => i.checked).map((i) => i.value);
+
+  // ---------- 일정 카드 ----------
+  function addEntry(data) {
+    const d = data || {};
+    const el = document.createElement("div");
+    el.className = "entry";
+    el.innerHTML =
+      '<div class="drop"><span>QR 이미지<br>클릭 · 드래그<br>또는 붙여넣기</span>' +
+      '<input type="file" accept="image/*" hidden /></div>' +
+      '<div class="entry-fields">' +
+        '<div class="entry-top"><input type="time" /><button class="link remove">삭제</button></div>' +
+        '<input type="text" class="link-input" placeholder="닫을 때 열릴 링크 (선택)" />' +
+        '<p class="hint"></p>' +
+      '</div>';
+
+    const drop = el.querySelector(".drop");
+    const file = el.querySelector("input[type=file]");
+    const time = el.querySelector("input[type=time]");
+    const link = el.querySelector(".link-input");
+
+    el.qrImage = d.qr_image || "";
+    time.value = d.time || "";
+    link.value = d.after_close_url || "";
+
+    function paint() {
+      if (el.qrImage) {
+        drop.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = el.qrImage;
+        drop.appendChild(img);
+      }
+      el.classList.toggle("invalid", !!time.value && !TIME_RE.test(time.value));
+    }
+
+    async function useFile(f) {
+      if (!f || !/^image\//.test(f.type)) return;
+      el.qrImage = await readFileAsDataUrl(f);
+      paint();
+      refreshDirty();
+      toast("QR 이미지를 넣었습니다");
+    }
+
+    drop.addEventListener("click", () => file.click());
+    file.addEventListener("change", () => useFile(file.files[0]));
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      useFile(e.dataTransfer.files[0]);
+    });
+    // 이 카드를 클릭해둔 상태에서 Ctrl+V 하면 스크린샷이 바로 들어간다
+    el.addEventListener("focusin", () => { pasteTarget = el; });
+    el.pasteFile = useFile;
+
+    time.addEventListener("input", () => { paint(); refreshDirty(); });
+    link.addEventListener("input", refreshDirty);
+    el.querySelector(".remove").addEventListener("click", () => {
+      el.remove();
+      if (!$("entries").children.length) addEntry();
+      refreshDirty();
+    });
+
+    paint();
+    $("entries").appendChild(el);
+    return el;
+  }
+
+  let pasteTarget = null;
+  document.addEventListener("paste", (e) => {
+    const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"));
+    if (!item) return;
+    const target = pasteTarget || $("entries").lastElementChild;
+    if (target) target.pasteFile(item.getAsFile());
+  });
+
+  function renderEntries(list) {
+    $("entries").innerHTML = "";
+    (list && list.length ? list : [{}]).forEach(addEntry);
+  }
+
+  function collect() {
+    return Array.from($("entries").children).map((el) => ({
+      time: el.querySelector("input[type=time]").value.trim(),
+      qr_image: el.qrImage || "",
+      after_close_url: el.querySelector(".link-input").value.trim(),
+    }));
+  }
+
+  // ---------- 변경 감지 ----------
+  function sign(entries, days) {
     return JSON.stringify([
-      entries.map((e) => [e.time, (e.qr_image || "").slice(0, 64), e.after_close_url || ""]),
+      entries.map((e) => [e.time, (e.qr_image || "").slice(0, 80), e.after_close_url]),
       days,
     ]);
   }
 
-  function markStale() {
-    if (!liveConfig) return;
-    const form = collectSchedule().filter((e) => e.time || e.qr_image);
-    const differs =
-      form.length > 0 &&
-      signature(form, getActiveDays()) !==
-        signature(toEntries(liveConfig), liveConfig.active_days || []);
-    document.getElementById("liveCard").classList.toggle("stale", differs);
-  }
-
-  async function refreshLive() {
-    try {
-      const r = await fetch("/api/current?t=" + Date.now());
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "불러오기 실패");
-      renderLive(data);
-    } catch (e) {
-      document.getElementById("liveEntries").textContent = "불러오지 못했습니다: " + e.message;
-    }
-  }
-
-  dayEls.forEach((el) => el.addEventListener("change", markStale));
-  addRowBtn.addEventListener("click", () => { addRow(); markStale(); });
-
-  renderRows([]);
-  refreshLive();
-
-  loadBtn.addEventListener("click", async () => {
-    loadBtn.disabled = true;
-    showMsg("불러오는 중...");
-    try {
-      const r = await fetch("/api/current?t=" + Date.now());
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "불러오기 실패");
-      renderRows(toEntries(data));
-      setActiveDays(data.active_days);
-      renderLive(data);
-      showMsg("현재 값을 불러왔습니다.", "ok");
-    } catch (e) {
-      showMsg("오류: " + e.message, "error");
-    } finally {
-      loadBtn.disabled = false;
-    }
-  });
-
-  saveBtn.addEventListener("click", async () => {
-    const password = passwordEl.value.trim();
-    const schedule = collectSchedule();
-    const active_days = getActiveDays();
-
-    if (!password) {
-      showMsg("관리자 비밀번호를 입력하세요.", "error");
-      return;
-    }
-    if (!schedule.length) {
-      showMsg("퇴실 시각을 최소 하나는 등록하세요.", "error");
-      return;
-    }
-    for (const e of schedule) {
-      if (!TIME_RE.test(e.time)) {
-        showMsg('시각은 HH:MM 형식으로 입력하세요: "' + (e.time || "(비어 있음)") + '"', "error");
-        return;
-      }
-      if (!e.qr_image) {
-        showMsg(e.time + "에 띄울 QR 이미지를 선택하세요. (기존 이미지를 쓰려면 '현재 값 불러오기')", "error");
-        return;
-      }
-      if (e.after_close_url && !/^https?:\/\//.test(e.after_close_url)) {
-        showMsg(e.time + "의 링크는 http:// 또는 https://로 시작해야 합니다.", "error");
-        return;
-      }
-    }
-    const times = schedule.map((e) => e.time);
-    const dupe = times.find((t, i) => times.indexOf(t) !== i);
-    if (dupe) {
-      showMsg("같은 시각이 두 번 등록되었습니다: " + dupe, "error");
-      return;
-    }
-    if (active_days.length === 0) {
-      showMsg("실행 요일을 최소 하나는 선택하세요.", "error");
-      return;
-    }
-
-    saveBtn.disabled = true;
-    showMsg("저장 중...");
-    try {
-      const r = await fetch("/api/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, schedule, active_days }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "저장 실패");
-      showMsg("저장 완료! 학생 PC에는 곧 자동으로 반영됩니다.", "ok");
-      await refreshLive();
-    } catch (e) {
-      showMsg("오류: " + e.message, "error");
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-
-  // ---- 저장된 설정 (프리셋) ----
-  const presetsDetails = document.getElementById("presetsDetails");
-  const presetSelectEl = document.getElementById("presetSelect");
-  const presetNameEl = document.getElementById("presetName");
-  const presetRenameBtn = document.getElementById("presetRenameBtn");
-  const presetDeleteBtn = document.getElementById("presetDeleteBtn");
-  const presetSaveBtn = document.getElementById("presetSaveBtn");
-  const presetMsgEl = document.getElementById("presetMsg");
-
-  let presetsCache = {};
-
-  function showPresetMsg(text, type) {
-    presetMsgEl.textContent = text;
-    presetMsgEl.className = "msg" + (type ? " " + type : "");
-  }
-
-  function renderPresetOptions() {
-    presetSelectEl.innerHTML = "";
-    const ids = Object.keys(presetsCache);
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = ids.length ? "선택하세요" : "(저장된 설정 없음)";
-    presetSelectEl.appendChild(placeholder);
-    ids.forEach((id) => {
-      const opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = presetsCache[id].name;
-      presetSelectEl.appendChild(opt);
+  function describeChanges(now, before) {
+    const parts = [];
+    const nowTimes = now.map((e) => e.time).filter(Boolean);
+    const beforeTimes = before.map((e) => e.time).filter(Boolean);
+    const added = nowTimes.filter((t) => !beforeTimes.includes(t));
+    const removed = beforeTimes.filter((t) => !nowTimes.includes(t));
+    if (added.length) parts.push("추가 " + added.join(", "));
+    if (removed.length) parts.push("삭제 " + removed.join(", "));
+    const changedImg = now.filter((e) => {
+      const old = before.find((b) => b.time === e.time);
+      return old && (old.qr_image || "").slice(0, 80) !== (e.qr_image || "").slice(0, 80);
     });
+    if (changedImg.length) parts.push("QR 변경 " + changedImg.map((e) => e.time).join(", "));
+    if (getDays().join(",") !== (live.active_days || []).join(",")) parts.push("요일 변경");
+    return parts.length ? parts.join(" · ") : "수정한 내용";
   }
 
-  async function callPresetsApi(body) {
-    const r = await fetch("/api/presets", {
+  function refreshDirty() {
+    if (!live) return;
+    const now = collect();
+    const before = toEntries(live);
+    const dirty = sign(now, getDays()) !== sign(before, live.active_days || []);
+    $("savebar").classList.toggle("show", dirty);
+    $("statusBadge").className = "status" + (dirty ? " dirty" : "");
+    $("statusBadge").textContent = dirty ? "저장 안 됨" : "적용 중";
+    if (dirty) $("saveSummary").innerHTML = "<b>" + describeChanges(now, before) + "</b> — 저장해야 학생에게 반영됩니다";
+  }
+
+  // ---------- 서버 ----------
+  async function api(path, body) {
+    const r = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "요청 실패");
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "요청 실패 (" + r.status + ")");
     return data;
   }
 
-  async function refreshPresets() {
-    const password = passwordEl.value.trim();
-    if (!password) {
-      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
-      return;
-    }
-    showPresetMsg("불러오는 중...");
+  async function loadLive() {
+    const r = await fetch("/api/current?t=" + Date.now());
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "불러오기 실패");
+    live = data;
+    renderEntries(toEntries(data));
+    renderDays(data.active_days);
+    refreshDirty();
+    const times = toEntries(data).map((e) => e.time).filter(Boolean);
+    $("subtitle").textContent = times.length
+      ? "현재 " + times.join(", ") + " 에 표시됩니다."
+      : "아직 등록된 일정이 없습니다.";
+  }
+
+  // ---------- 잠금 해제 ----------
+  async function unlock() {
+    const pw = $("password").value.trim();
+    if (!pw) { setMsg($("lockMsg"), "비밀번호를 입력하세요.", "error"); return; }
+    $("unlockBtn").disabled = true;
+    setMsg($("lockMsg"), "확인 중...");
     try {
-      const data = await callPresetsApi({ password, action: "list" });
+      await api("/api/presets", { password: pw, action: "list" });  // 비밀번호 검증 겸 목록 조회
+      password = pw;
+      sessionStorage.setItem("qr_admin_pw", pw);
+      $("lock").hidden = true;
+      $("editor").hidden = false;
+      await loadLive();
+      setMsg($("lockMsg"), "");
+    } catch (e) {
+      setMsg($("lockMsg"), e.message, "error");
+    } finally {
+      $("unlockBtn").disabled = false;
+    }
+  }
+
+  $("unlockBtn").addEventListener("click", unlock);
+  $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+
+  $("addBtn").addEventListener("click", () => { addEntry(); refreshDirty(); });
+  $("resetBtn").addEventListener("click", () => {
+    renderEntries(toEntries(live));
+    renderDays(live.active_days);
+    refreshDirty();
+    toast("되돌렸습니다");
+  });
+
+  $("saveBtn").addEventListener("click", async () => {
+    const schedule = collect();
+    for (const e of schedule) {
+      if (!TIME_RE.test(e.time)) { toast("시각을 모두 입력하세요", true); return; }
+      if (!e.qr_image) { toast(e.time + " 의 QR 이미지를 넣어주세요", true); return; }
+      if (e.after_close_url && !/^https?:\/\//.test(e.after_close_url)) {
+        toast(e.time + " 의 링크는 http(s)로 시작해야 합니다", true); return;
+      }
+    }
+    const times = schedule.map((e) => e.time);
+    const dupe = times.find((t, i) => times.indexOf(t) !== i);
+    if (dupe) { toast("같은 시각이 두 번 있습니다: " + dupe, true); return; }
+    if (!getDays().length) { toast("실행 요일을 최소 하나 선택하세요", true); return; }
+
+    $("saveBtn").disabled = true;
+    try {
+      await api("/api/update", { password, schedule, active_days: getDays() });
+      await loadLive();
+      toast("저장했습니다 · 학생 PC에 1분 내 반영");
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      $("saveBtn").disabled = false;
+    }
+  });
+
+  // ---------- 프리셋 ----------
+  function renderPresetOptions() {
+    const sel = $("presetSelect");
+    sel.innerHTML = "";
+    const ids = Object.keys(presetsCache);
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = ids.length ? "불러올 설정 선택..." : "(저장된 설정 없음)";
+    sel.appendChild(ph);
+    ids.forEach((id) => {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = presetsCache[id].name;
+      sel.appendChild(o);
+    });
+  }
+
+  async function refreshPresets() {
+    try {
+      const data = await api("/api/presets", { password, action: "list" });
       presetsCache = data.presets || {};
       renderPresetOptions();
-      showPresetMsg("");
     } catch (e) {
-      showPresetMsg("오류: " + e.message, "error");
+      setMsg($("presetMsg"), e.message, "error");
     }
   }
 
-  presetsDetails.addEventListener("toggle", () => {
-    if (presetsDetails.open) refreshPresets();
+  $("presetsPanel").addEventListener("toggle", () => {
+    if ($("presetsPanel").open) refreshPresets();
   });
 
-  presetSelectEl.addEventListener("change", () => {
-    const id = presetSelectEl.value;
-    if (!id || !presetsCache[id]) return;
-    const p = presetsCache[id];
-    renderRows(toEntries(p));
-    setActiveDays(p.active_days);
-    markStale();
-    showPresetMsg('"' + p.name + '" 설정을 위 입력칸에 채웠습니다. "저장"을 눌러야 학생에게 반영됩니다.', "ok");
+  $("presetSelect").addEventListener("change", () => {
+    const p = presetsCache[$("presetSelect").value];
+    if (!p) return;
+    renderEntries(toEntries(p));
+    renderDays(p.active_days);
+    refreshDirty();
+    toast('"' + p.name + '" 을 불러왔습니다 · 저장해야 반영됩니다');
   });
 
-  presetSaveBtn.addEventListener("click", async () => {
-    const password = passwordEl.value.trim();
-    const name = presetNameEl.value.trim();
-    const schedule = collectSchedule();
-
-    if (!password) {
-      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
+  $("presetSaveBtn").addEventListener("click", async () => {
+    const name = $("presetName").value.trim();
+    if (!name) { setMsg($("presetMsg"), "이름을 입력하세요.", "error"); return; }
+    const schedule = collect();
+    if (schedule.some((e) => !e.time || !e.qr_image)) {
+      setMsg($("presetMsg"), "시각과 QR 이미지를 먼저 채워주세요.", "error");
       return;
     }
-    if (!name) {
-      showPresetMsg("설정 이름을 입력하세요 (예: 설정1).", "error");
-      return;
-    }
-    if (!schedule.length || schedule.some((e) => !e.time || !e.qr_image)) {
-      showPresetMsg("저장할 시각과 QR 이미지를 먼저 채워주세요.", "error");
-      return;
-    }
-
-    presetSaveBtn.disabled = true;
-    showPresetMsg("저장 중...");
     try {
-      await callPresetsApi({
-        password,
-        action: "save",
-        name,
-        schedule,
-        active_days: getActiveDays(),
-      });
-      presetNameEl.value = "";
-      showPresetMsg('"' + name + '" 이름으로 저장했습니다.', "ok");
+      await api("/api/presets", { password, action: "save", name, schedule, active_days: getDays() });
+      $("presetName").value = "";
+      setMsg($("presetMsg"), "");
       await refreshPresets();
+      toast('"' + name + '" 으로 저장했습니다');
     } catch (e) {
-      showPresetMsg("오류: " + e.message, "error");
-    } finally {
-      presetSaveBtn.disabled = false;
+      setMsg($("presetMsg"), e.message, "error");
     }
   });
 
-  presetRenameBtn.addEventListener("click", async () => {
-    const password = passwordEl.value.trim();
-    const id = presetSelectEl.value;
-    if (!password) {
-      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
-      return;
-    }
-    if (!id || !presetsCache[id]) {
-      showPresetMsg("이름을 바꿀 설정을 선택하세요.", "error");
-      return;
-    }
-    const newName = prompt("새 이름을 입력하세요.", presetsCache[id].name);
-    if (!newName || !newName.trim()) return;
-
-    showPresetMsg("변경 중...");
+  $("presetRenameBtn").addEventListener("click", async () => {
+    const id = $("presetSelect").value;
+    if (!presetsCache[id]) { setMsg($("presetMsg"), "설정을 선택하세요.", "error"); return; }
+    const name = prompt("새 이름", presetsCache[id].name);
+    if (!name || !name.trim()) return;
     try {
-      await callPresetsApi({ password, action: "rename", id, name: newName.trim() });
-      showPresetMsg("이름을 변경했습니다.", "ok");
+      await api("/api/presets", { password, action: "rename", id, name: name.trim() });
       await refreshPresets();
-    } catch (e) {
-      showPresetMsg("오류: " + e.message, "error");
-    }
+      toast("이름을 바꿨습니다");
+    } catch (e) { setMsg($("presetMsg"), e.message, "error"); }
   });
 
-  presetDeleteBtn.addEventListener("click", async () => {
-    const password = passwordEl.value.trim();
-    const id = presetSelectEl.value;
-    if (!password) {
-      showPresetMsg("먼저 위에 관리자 비밀번호를 입력하세요.", "error");
-      return;
-    }
-    if (!id || !presetsCache[id]) {
-      showPresetMsg("삭제할 설정을 선택하세요.", "error");
-      return;
-    }
-    if (!confirm('"' + presetsCache[id].name + '" 설정을 삭제할까요?')) return;
-
-    showPresetMsg("삭제 중...");
+  $("presetDeleteBtn").addEventListener("click", async () => {
+    const id = $("presetSelect").value;
+    if (!presetsCache[id]) { setMsg($("presetMsg"), "설정을 선택하세요.", "error"); return; }
+    if (!confirm('"' + presetsCache[id].name + '" 을 삭제할까요?')) return;
     try {
-      await callPresetsApi({ password, action: "delete", id });
-      showPresetMsg("삭제했습니다.", "ok");
+      await api("/api/presets", { password, action: "delete", id });
       await refreshPresets();
-    } catch (e) {
-      showPresetMsg("오류: " + e.message, "error");
-    }
+      toast("삭제했습니다");
+    } catch (e) { setMsg($("presetMsg"), e.message, "error"); }
   });
 
-  // ---- 비밀번호 변경 ----
-  const currentPwEl = document.getElementById("currentPw");
-  const newPwEl = document.getElementById("newPw");
-  const newPw2El = document.getElementById("newPw2");
-  const changePwBtn = document.getElementById("changePwBtn");
-  const pwMsgEl = document.getElementById("pwMsg");
-
-  function showPwMsg(text, type) {
-    pwMsgEl.textContent = text;
-    pwMsgEl.className = "msg" + (type ? " " + type : "");
-  }
-
-  changePwBtn.addEventListener("click", async () => {
-    const current_password = currentPwEl.value.trim();
-    const new_password = newPwEl.value.trim();
-    const confirmPassword = newPw2El.value.trim();
-
-    if (!current_password || !new_password) {
-      showPwMsg("현재 비밀번호와 새 비밀번호를 입력하세요.", "error");
-      return;
-    }
-    if (new_password.length < 6) {
-      showPwMsg("새 비밀번호는 6자 이상이어야 합니다.", "error");
-      return;
-    }
-    if (new_password !== confirmPassword) {
-      showPwMsg("새 비밀번호 확인이 일치하지 않습니다.", "error");
-      return;
-    }
-
-    changePwBtn.disabled = true;
-    showPwMsg("변경 중...");
+  // ---------- 비밀번호 변경 ----------
+  $("changePwBtn").addEventListener("click", async () => {
+    const a = $("newPw").value.trim(), b = $("newPw2").value.trim();
+    if (a.length < 6) { setMsg($("pwMsg"), "6자 이상이어야 합니다.", "error"); return; }
+    if (a !== b) { setMsg($("pwMsg"), "확인이 일치하지 않습니다.", "error"); return; }
     try {
-      const r = await fetch("/api/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_password, new_password }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "변경 실패");
-      showPwMsg("비밀번호가 변경되었습니다. 다음부터 새 비밀번호를 사용하세요.", "ok");
-      currentPwEl.value = "";
-      newPwEl.value = "";
-      newPw2El.value = "";
-    } catch (e) {
-      showPwMsg("오류: " + e.message, "error");
-    } finally {
-      changePwBtn.disabled = false;
-    }
+      await api("/api/change-password", { current_password: password, new_password: a });
+      password = a;
+      sessionStorage.setItem("qr_admin_pw", a);
+      $("newPw").value = ""; $("newPw2").value = "";
+      setMsg($("pwMsg"), "");
+      toast("비밀번호를 변경했습니다");
+    } catch (e) { setMsg($("pwMsg"), e.message, "error"); }
   });
+
+  // 같은 탭에서 새로고침해도 다시 입력하지 않도록
+  (function restore() {
+    const saved = sessionStorage.getItem("qr_admin_pw");
+    if (!saved) return;
+    $("password").value = saved;
+    unlock();
+  })();
 </script>
 </body>
 </html>
