@@ -26,7 +26,7 @@ LOG_PATH = Path(__file__).parent / "qrcode.log"
 LOG_MAX_BYTES = 512_000
 BACKUP_PATH = Path(__file__).parent / "main.py.bak"
 
-VERSION = "1.6.1"
+VERSION = "1.6.2"
 DEFAULT_UPDATE_URL = (
     "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json"
 )
@@ -545,7 +545,10 @@ def run_scheduler(config):
         today = now.strftime("%Y-%m-%d")
 
         today_key = WEEKDAY_KEYS[now.weekday()]
-        is_active_day = today_key in state.get("active_days", DEFAULT_ACTIVE_DAYS)
+        # 설정이 비어 있거나 null로 오면 기본값(월~금)을 쓴다.
+        # 그냥 두면 None으로 비교하다 프로그램이 죽는다.
+        active_days = state.get("active_days") or DEFAULT_ACTIVE_DAYS
+        is_active_day = today_key in active_days
 
         if triggered_date != today:  # 날짜가 바뀌면 오늘치를 새로 시작
             triggered_date = today

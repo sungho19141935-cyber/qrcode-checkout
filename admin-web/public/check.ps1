@@ -32,12 +32,35 @@ $running = @(Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' or Name='
 Write-Check "실행 중" ($running.Count -gt 0) $(if ($running.Count -gt 0) { "$($running.Count)개 프로세스 (1개 인스턴스는 보통 2개로 보입니다)" } else { "지금 돌고 있지 않습니다" })
 if ($running.Count -eq 0) { $problems += "프로그램이 실행되고 있지 않습니다. 재설치하거나 재부팅해보세요." }
 
-# 3. 시작프로그램 등록
+# 3. 프로그램 버전 (구버전이면 요일 설정 등 최신 기능이 없다)
+$localVer = $null
+if ($installed) {
+    $m = Select-String -Path (Join-Path $InstallDir "main.py") -Pattern '^VERSION = "([^"]+)"' -Encoding UTF8 |
+         Select-Object -First 1
+    if ($m) { $localVer = $m.Matches[0].Groups[1].Value }
+}
+$latestVer = $null
+try {
+    $latestVer = (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sungho19141935-cyber/qrcode-checkout/main/version.json?t=$([int](Get-Date -UFormat %s))" -UseBasicParsing -TimeoutSec 10).Content |
+                 ConvertFrom-Json | Select-Object -ExpandProperty version
+} catch {}
+
+if (-not $localVer) {
+    Write-Check "프로그램 버전" $false "구버전 (요일 설정 등 최신 기능이 없습니다)"
+    $problems += "오래된 버전입니다. 주말에도 QR이 뜨거나 설정이 반영되지 않습니다. 재설치가 필요합니다."
+} elseif ($latestVer -and $localVer -ne $latestVer) {
+    Write-Check "프로그램 버전" $false "$localVer (최신 $latestVer)"
+    $problems += "최신 버전이 아닙니다. 보통 1시간 안에 자동으로 업데이트되지만, 급하면 재설치하세요."
+} else {
+    Write-Check "프로그램 버전" $true $(if ($localVer) { "$localVer (최신)" } else { "확인 불가" })
+}
+
+# 4. 시작프로그램 등록
 $startupOk = Test-Path $StartupVbs
 Write-Check "자동 시작 등록" $startupOk $(if ($startupOk) { "등록됨" } else { "등록 안 됨 — 부팅해도 자동 실행되지 않습니다" })
 if (-not $startupOk) { $problems += "시작프로그램에 등록되어 있지 않습니다. 설치 명령을 다시 실행하세요." }
 
-# 4. 중앙 설정 접근 가능 여부 (학교 방화벽/프록시에 막히는 경우가 있음)
+# 5. 중앙 설정 접근 가능 여부 (학교 방화벽/프록시에 막히는 경우가 있음)
 $remoteTime = $null
 try {
     $r = Invoke-WebRequest -Uri "$SyncUrl`?t=$([int](Get-Date -UFormat %s))" -UseBasicParsing -TimeoutSec 10
@@ -49,7 +72,7 @@ try {
     $problems += "GitHub 연결이 막혀 최신 퇴실 시각을 못 받아옵니다. 다른 와이파이(휴대폰 핫스팟 등)로 바꿔보세요."
 }
 
-# 5. 이 PC가 실제로 쓰고 있는 시각
+# 6. 이 PC가 실제로 쓰고 있는 시각
 $localTime = $null
 $cachePath = Join-Path $InstallDir "cache.json"
 $configPath = Join-Path $InstallDir "config.json"
@@ -60,17 +83,24 @@ foreach ($f in @($cachePath, $configPath)) {
 }
 if ($localTime) {
     $match = ($null -eq $remoteTime) -or ($localTime -eq $remoteTime)
+    $localDays = $null
+    foreach ($f in @($cachePath, $configPath)) {
+        if ((-not $localDays) -and (Test-Path $f)) {
+            try { $localDays = (Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json).active_days } catch {}
+        }
+    }
+    if ($localDays) { Write-Check "이 PC의 실행 요일" $true ($localDays -join ',') }
     Write-Check "이 PC의 퇴실 시각" $match $(if ($match) { $localTime } else { "$localTime (중앙 설정 $remoteTime 과 다릅니다)" })
     if (-not $match) { $problems += "이 PC가 오래된 시각($localTime)을 쓰고 있습니다. 재설치하면 맞춰집니다." }
 }
 
-# 6. PC 시계 (시각이 틀어져 있으면 엉뚱한 때 뜹니다)
+# 7. PC 시계 (시각이 틀어져 있으면 엉뚱한 때 뜹니다)
 $tz = (Get-TimeZone).Id
 $clockOk = $tz -eq "Korea Standard Time"
 Write-Check "PC 시계" $clockOk "$(Get-Date -Format 'yyyy-MM-dd HH:mm') / $tz"
 if (-not $clockOk) { $problems += "시간대가 한국(Korea Standard Time)이 아닙니다. Windows 설정에서 시간대를 확인하세요." }
 
-# 7. 최근 기록
+# 8. 최근 기록
 $logPath = Join-Path $InstallDir "qrcode.log"
 if (Test-Path $logPath) {
     Write-Host ""
